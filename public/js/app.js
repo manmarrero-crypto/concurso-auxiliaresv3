@@ -276,6 +276,16 @@ function poblarSelectoresPuestos(filtroRankingText = '') {
       selectRanking.selectedIndex = 0;
       puestoRankingActual = selectRanking.value;
     }
+
+    // Sincronizar inmediatamente si el puesto seleccionado en ranking ha cambiado
+    const valorFinalRank = selectRanking.value;
+    if (valorFinalRank && valorFinalRank !== valorPrevioRank) {
+      puestoRankingActual = valorFinalRank;
+      const esVistaRankVisible = document.getElementById('vistaAdjudicacion')?.style?.display === 'block';
+      if (esVistaRankVisible) {
+        cargarCuadroAdjudicacion();
+      }
+    }
   }
 }
 
@@ -350,6 +360,11 @@ function cambiarOrdenRankingPill(criterioBase) {
   select.value = nuevoValor;
   actualizarPillsRankingOrdenActivo(nuevoValor);
   poblarSelectoresPuestos();
+  const selRank = document.getElementById('selectPuestoRanking');
+  if (selRank && selRank.value) {
+    puestoRankingActual = selRank.value;
+    cargarCuadroAdjudicacion();
+  }
 }
 
 function actualizarPillsRankingOrdenActivo(criterio) {
@@ -928,16 +943,46 @@ function configurarEventos() {
   }
 
   // Selector puesto en ranking
-  document.getElementById('selectPuestoRanking').addEventListener('change', (e) => {
-    puestoRankingActual = e.target.value;
-    cargarCuadroAdjudicacion();
-  });
+  const selPuestoRankingEl = document.getElementById('selectPuestoRanking');
+  if (selPuestoRankingEl) {
+    selPuestoRankingEl.addEventListener('change', (e) => {
+      puestoRankingActual = e.target.value;
+      cargarCuadroAdjudicacion();
+    });
+    // Permitir clic para forzar carga si ya estaba seleccionado
+    selPuestoRankingEl.addEventListener('click', (e) => {
+      if (selPuestoRankingEl.value && (!datosRankingActual || !datosRankingActual.puesto || (datosRankingActual.puesto.id !== selPuestoRankingEl.value && datosRankingActual.puesto.codigoRpt !== selPuestoRankingEl.value))) {
+        puestoRankingActual = selPuestoRankingEl.value;
+        cargarCuadroAdjudicacion();
+      }
+    });
+  }
 
   // Filtro de búsqueda rápida en el selector de ranking
   const fRank = document.getElementById('filtroTextoRanking');
   if (fRank) {
+    let debounceRankFilter = null;
     fRank.addEventListener('input', (e) => {
       poblarSelectoresPuestos(e.target.value);
+      clearTimeout(debounceRankFilter);
+      debounceRankFilter = setTimeout(() => {
+        const sel = document.getElementById('selectPuestoRanking');
+        if (sel && sel.value) {
+          puestoRankingActual = sel.value;
+          cargarCuadroAdjudicacion();
+        }
+      }, 120);
+    });
+    fRank.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        clearTimeout(debounceRankFilter);
+        const sel = document.getElementById('selectPuestoRanking');
+        if (sel && sel.value) {
+          puestoRankingActual = sel.value;
+          cargarCuadroAdjudicacion();
+        }
+      }
     });
   }
 
@@ -947,6 +992,11 @@ function configurarEventos() {
     ordRankSelect.addEventListener('change', (e) => {
       actualizarPillsRankingOrdenActivo(e.target.value);
       poblarSelectoresPuestos();
+      const sel = document.getElementById('selectPuestoRanking');
+      if (sel && sel.value) {
+        puestoRankingActual = sel.value;
+        cargarCuadroAdjudicacion();
+      }
     });
   }
 
