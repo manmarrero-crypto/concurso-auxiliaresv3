@@ -90,6 +90,15 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
           Descargar Excel
         </button>
+        <button id="btnComparadorHeader" class="btn btn-outline" onclick="abrirModalComparador()" style="border-color:#0284c7; color:#0369a1; font-weight:600; font-size:0.775rem;" title="Comparador Oficial de Desempates (Base Novena)">
+          ⚖️ Desempates
+        </button>
+        <button id="btnSimuladorHeader" class="btn btn-outline" onclick="abrirModalSimulador()" style="border-color:#16a34a; color:#15803d; font-weight:600; font-size:0.775rem;" title="Simulador de Alegaciones y Cascada de Resultas">
+          🧪 Simulador
+        </button>
+        <button id="btnModoTribunalHeader" class="btn btn-outline" onclick="abrirModoTribunal()" style="border-color:#8b5cf6; color:#7c3aed; font-weight:700; font-size:0.775rem; background:#f5f3ff;" title="Modo Pantalla Completa para Proyector en Sala de Juntas">
+          📺 Modo Tribunal
+        </button>
         <!-- Menú de Copias de Seguridad (Backup) -->
         <div class="dropdown-backup" style="position:relative; display:inline-block;">
           <button id="btnBackupToggle" class="btn btn-outline" onclick="toggleMenuBackup(event)" style="border-color:#3b82f6; color:#1d4ed8; font-weight:600; font-size:0.775rem;" title="Copias de Seguridad y Respaldo">
@@ -158,6 +167,29 @@
                 <div class="form-group flex-1">
                   <label for="inputDNI">DNI / NIE</label>
                   <input type="text" id="inputDNI" placeholder="12345678Z" class="form-control">
+                </div>
+              </div>
+
+              <!-- Control de Tramitación del Tribunal (Estado y Notas Confidenciales) -->
+              <div class="mt-2" style="background:#fefce8; padding:8px 12px; border-radius:6px; border:1px solid #fef08a;">
+                <div class="form-row" style="align-items:center;">
+                  <div class="form-group flex-1 mb-0">
+                    <label for="selectEstadoTramitacion" style="font-size:0.75rem; font-weight:700; color:#854d0e; margin-bottom:2px;">
+                      📋 Estado Expediente (Tribunal)
+                    </label>
+                    <select id="selectEstadoTramitacion" class="form-control" style="font-size:0.75rem; padding:4px 8px; font-weight:700;">
+                      <option value="borrador" selected>🟡 Borrador / Pendiente</option>
+                      <option value="revisado_vocal">🔵 Revisado por Vocal</option>
+                      <option value="validado_tribunal">🟢 Validado por Tribunal</option>
+                      <option value="alegacion_pendiente">🔴 Con Alegación / Recurso</option>
+                    </select>
+                  </div>
+                  <div class="form-group flex-2 mb-0">
+                    <label for="inputNotasTribunal" style="font-size:0.75rem; font-weight:700; color:#854d0e; margin-bottom:2px;">
+                      🔒 Notas Internas del Tribunal (Confidencial)
+                    </label>
+                    <input type="text" id="inputNotasTribunal" placeholder="Apuntes internos del tribunal..." class="form-control" style="font-size:0.75rem; padding:4px 8px;">
+                  </div>
                 </div>
               </div>
 
@@ -718,6 +750,12 @@
                 <button id="btnCargarMuestra" class="btn btn-outline" style="font-size:0.75rem;" title="Cargar varios aspirantes con méritos para simular adjudicaciones y listas de reserva">
                   👥 Simular con Muestras
                 </button>
+                <button id="btnAbrirComparadorV2" class="btn btn-outline" onclick="abrirModalComparador()" style="border-color:#0284c7; color:#0369a1; font-weight:700; font-size:0.775rem; background:#f0f9ff;" title="Comparar dos aspirantes con las reglas de la Base Novena">
+                  ⚖️ Desempates
+                </button>
+                <button id="btnAbrirSimuladorV2" class="btn btn-outline" onclick="abrirModalSimulador()" style="border-color:#16a34a; color:#15803d; font-weight:700; font-size:0.775rem; background:#f0fdf4;" title="Simular qué ocurriría si se estima una alegación">
+                  🧪 Simular Alegación
+                </button>
                 <button id="btnAbrirModalActa" class="btn btn-outline" onclick="abrirModalConfigActa()" style="border-color:#1e40af; color:#1e40af; font-weight:700; font-size:0.775rem; background:#eff6ff;" title="Generar documento oficial de Acta del Tribunal en Word (.doc) para formalizar el acuerdo">
                   📄 Acta Oficial (Word)
                 </button>
@@ -962,12 +1000,13 @@
                     <th style="width:95px;">Puntuación</th>
                     <th>Puestos Pedidos (Prelación)</th>
                     <th>Adjudicación Actual</th>
+                    <th style="width:130px;">Estado / Notas</th>
                     <th style="width:65px; text-align:center;">Acciones</th>
                   </tr>
                 </thead>
                 <tbody id="tbodyAuditoriaValoraciones">
                   <tr>
-                    <td colspan="6" class="text-center empty-state">Cargando valoraciones...</td>
+                    <td colspan="7" class="text-center empty-state">Cargando valoraciones...</td>
                   </tr>
                 </tbody>
               </table>
@@ -1074,11 +1113,24 @@
         </div>
         <div class="form-row">
           <div class="form-group flex-1">
+            <label>Fecha de Inicio (Opcional)</label>
+            <input type="date" id="mExpFechaInicio" class="form-control" onchange="calcularDiasExpModal()">
+          </div>
+          <div class="form-group flex-1">
+            <label>Fecha de Fin (Opcional)</label>
+            <input type="date" id="mExpFechaFin" class="form-control" onchange="calcularDiasExpModal()">
+          </div>
+        </div>
+        <div id="alertaSolapamientoExp" style="display:none; background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; padding:6px 10px; border-radius:5px; font-size:0.75rem; margin-bottom:8px;">
+          ⚠️ <strong>Aviso de Solapamiento:</strong> Las fechas introducidas coinciden o se superponen con otro período ya registrado para este aspirante.
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
             <label>Nivel Complemento de Destino (CD)</label>
             <input type="number" id="mExpCD" class="form-control" value="16" min="10" max="30">
           </div>
           <div class="form-group flex-1">
-            <label>Días Trabajados</label>
+            <label>Días Trabajados *</label>
             <input type="number" id="mExpDias" class="form-control" value="365" min="1">
           </div>
         </div>
@@ -1261,6 +1313,226 @@
           📥 Descargar Acta Oficial en Word (.doc)
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Modal Comparador Frente a Frente de Desempates (Base Novena) -->
+  <div id="modalComparadorDesempate" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width: 860px;">
+      <div class="modal-header" style="background:#0284c7; color:#ffffff;">
+        <h3 style="color:#ffffff; margin:0; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+          <span>⚖️</span> Comparador Oficial de Desempates (Base Novena)
+        </h3>
+        <button class="close-btn" onclick="cerrarModales()" style="color:#ffffff;">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="help-text mb-2" style="font-size:0.8rem; color:#475569;">
+          Selecciona dos aspirantes para dirimir el orden de prelación según el orden taxativo y vinculante de los criterios de desempate de la Base Novena:
+        </p>
+
+        <!-- Selector de Aspirantes y Puesto -->
+        <div class="form-row" style="background:#f0f9ff; padding:10px; border-radius:6px; border:1px solid #bae6fd; margin-bottom:12px;">
+          <div class="form-group flex-1 mb-0">
+            <label style="font-weight:700; color:#0369a1; font-size:0.75rem;">👤 Aspirante A:</label>
+            <select id="selectCompAspiranteA" class="form-control" style="font-weight:600;" onchange="ejecutarComparativaDesempate()"></select>
+          </div>
+          <div class="form-group flex-1 mb-0">
+            <label style="font-weight:700; color:#0369a1; font-size:0.75rem;">👤 Aspirante B:</label>
+            <select id="selectCompAspiranteB" class="form-control" style="font-weight:600;" onchange="ejecutarComparativaDesempate()"></select>
+          </div>
+          <div class="form-group flex-1 mb-0">
+            <label style="font-weight:700; color:#0369a1; font-size:0.75rem;">🎯 Puesto en Disputa (Opcional):</label>
+            <select id="selectCompPuesto" class="form-control" style="font-size:0.75rem;" onchange="ejecutarComparativaDesempate()">
+              <option value="">(Baremación General Concurso)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Banner Veredicto Vinculante Base Novena -->
+        <div id="bannerVeredictoDesempate" style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:12px 16px; margin-bottom:12px;">
+          <div style="font-size:0.85rem; color:#64748b; text-align:center;">Selecciona dos aspirantes diferentes para ver la resolución oficial.</div>
+        </div>
+
+        <!-- Tabla Desglose Frente a Frente -->
+        <div class="table-responsive">
+          <table class="data-table" id="tablaComparativaDesempate">
+            <thead>
+              <tr style="background:#f1f5f9;">
+                <th style="width:40%;">Criterio Reglamentario (Base Novena)</th>
+                <th id="thCompNomA" style="width:24%; text-align:right;">Aspirante A</th>
+                <th id="thCompNomB" style="width:24%; text-align:right;">Aspirante B</th>
+                <th style="width:12%; text-align:center;">Veredicto</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyComparativaDesempate">
+              <tr>
+                <td colspan="4" class="text-center empty-state">Selecciona dos aspirantes</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer" style="background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" class="btn btn-outline" onclick="cerrarModales()">Cerrar</button>
+        <button type="button" class="btn btn-primary" onclick="copiarDictamenDesempate()" style="background:#0284c7; border-color:#0284c7;">
+          📋 Copiar Dictamen para Acta
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Simulador de Alegaciones y Cascada de Resultas (What-if) -->
+  <div id="modalSimuladorAlegaciones" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width: 900px;">
+      <div class="modal-header" style="background:#15803d; color:#ffffff;">
+        <h3 style="color:#ffffff; margin:0; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+          <span>🧪</span> Simulador de Alegaciones y Cascada de Resultas (What-if)
+        </h3>
+        <button class="close-btn" onclick="cerrarModales()" style="color:#ffffff;">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; padding:8px 12px; border-radius:6px; font-size:0.8rem; margin-bottom:12px;">
+          ℹ️ <strong>Simulación en Memoria:</strong> Permite estimar una alegación sumando méritos a un aspirante para comprobar al instante el impacto en la asignación de plazas y desplazamientos en cadena sin alterar los datos oficiales.
+        </div>
+
+        <!-- Selección y Modificación -->
+        <div class="card" style="margin-bottom:12px; border:1px solid #dcfce7;">
+          <div class="card-body" style="padding:10px 14px;">
+            <div class="form-row">
+              <div class="form-group flex-2 mb-2">
+                <label style="font-weight:700; color:#166534; font-size:0.75rem;">👤 Aspirante que formula la alegación:</label>
+                <select id="selectSimAspirante" class="form-control" style="font-weight:600;" onchange="cargarDatosSimuladorAspirante()"></select>
+              </div>
+              <div class="form-group flex-1 mb-2">
+                <label style="font-weight:700; color:#166534; font-size:0.75rem;">📋 Adjudicación Original:</label>
+                <div id="simEstadoOriginalBadge" style="padding:6px 8px; font-size:0.775rem; font-weight:600; background:#f1f5f9; border-radius:4px; color:#334155;">-</div>
+              </div>
+            </div>
+
+            <div style="font-size:0.75rem; font-weight:700; color:#15803d; margin:6px 0 4px 0; text-transform:uppercase;">
+              Incrementos estimados por la alegación:
+            </div>
+            <div class="form-row">
+              <div class="form-group flex-1 mb-1">
+                <label style="font-size:0.72rem;">+ Horas Formación Específica</label>
+                <input type="number" id="simIncHorasEsp" class="form-control" value="0" min="0" step="1">
+              </div>
+              <div class="form-group flex-1 mb-1">
+                <label style="font-size:0.72rem;">+ Horas Formación General</label>
+                <input type="number" id="simIncHorasGen" class="form-control" value="0" min="0" step="1">
+              </div>
+              <div class="form-group flex-1 mb-1">
+                <label style="font-size:0.72rem;">+ Días Cabildo / IASS</label>
+                <input type="number" id="simIncDiasCabildo" class="form-control" value="0" min="0" step="1">
+              </div>
+              <div class="form-group flex-1 mb-1">
+                <label style="font-size:0.72rem;">+ Días Otras AAPP</label>
+                <input type="number" id="simIncDiasOtras" class="form-control" value="0" min="0" step="1">
+              </div>
+              <div class="form-group flex-1 mb-1">
+                <label style="font-size:0.72rem; color:#b45309; font-weight:700;">+ Puntos Directos</label>
+                <input type="number" id="simIncPuntosDirectos" class="form-control" value="0" min="-20" max="20" step="0.05">
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
+              <button type="button" class="btn btn-outline btn-xs" onclick="resetearValoresSimulador()">Limpiar Incrementos</button>
+              <button type="button" class="btn btn-success" onclick="ejecutarSimulacionAlegacion()" style="font-weight:700; padding:6px 14px;">
+                ⚡ Simular Cascada de Adjudicación
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resultados de la Simulación -->
+        <div id="panelResultadosSimulacion" style="display:none;">
+          <div id="simResumenBanner" style="padding:10px 14px; border-radius:6px; margin-bottom:10px;"></div>
+
+          <div style="font-size:0.8rem; font-weight:700; color:#1e293b; margin-bottom:6px;">
+            📊 Comparativa de Adjudicaciones Afectadas (Antes vs Después):
+          </div>
+          <div class="table-responsive" style="max-height:260px; overflow-y:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Aspirante</th>
+                  <th>Punt. Original</th>
+                  <th>Punt. Simulada</th>
+                  <th>Plaza Original</th>
+                  <th>Plaza Simulada</th>
+                  <th style="text-align:center;">Impacto</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyResultadosSimulacion"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" class="btn btn-outline" onclick="cerrarModales()">Cerrar</button>
+        <button type="button" id="btnConsolidarSimulacion" class="btn btn-primary" onclick="consolidarAlegacionSimulada()" style="display:none; background:#15803d; border-color:#15803d; font-weight:700;">
+          💾 Consolidar y Guardar Cambios en Concurso
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal / Overlay Modo Tribunal para Proyector de Sala de Juntas -->
+  <div id="modoTribunalOverlay" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:#0f172a; color:#f8fafc; z-index:99999; overflow-y:auto; padding:20px 32px; box-sizing:border-box;">
+    <!-- Barra Superior Proyector -->
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #334155; padding-bottom:14px; margin-bottom:18px; flex-wrap:wrap; gap:12px;">
+      <div style="display:flex; align-items:center; gap:14px;">
+        <div style="background:#2563eb; color:#ffffff; padding:8px 12px; border-radius:8px; font-weight:900; font-size:1.2rem;">
+          CABILDO
+        </div>
+        <div>
+          <h2 style="margin:0; font-size:1.35rem; color:#ffffff; font-weight:800; letter-spacing:0.5px;">
+            TRIBUNAL CALIFICADOR • CUADRO GENERAL DE ADJUDICACIÓN
+          </h2>
+          <div style="font-size:0.85rem; color:#94a3b8;">
+            Concurso Extraordinario de Auxiliares Administrativos (Disposición Transitoria 6ª LPAC)
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:14px;">
+        <div id="modoTribunalKPIs" style="display:flex; gap:10px; font-size:0.85rem;">
+          <span style="background:#1e293b; padding:6px 10px; border-radius:6px; border:1px solid #334155;">
+            Plazas Totales: <strong id="mtKpiTotal" style="color:#60a5fa;">125</strong>
+          </span>
+          <span style="background:#1e293b; padding:6px 10px; border-radius:6px; border:1px solid #334155;">
+            Cubiertas: <strong id="mtKpiCubiertas" style="color:#4ade80;">0</strong>
+          </span>
+          <span style="background:#1e293b; padding:6px 10px; border-radius:6px; border:1px solid #334155;">
+            Vacantes: <strong id="mtKpiVacantes" style="color:#f87171;">125</strong>
+          </span>
+        </div>
+        <button type="button" onclick="cerrarModoTribunal()" style="background:#dc2626; color:#ffffff; border:none; padding:8px 16px; border-radius:6px; font-size:0.9rem; font-weight:700; cursor:pointer;" title="Salir (Tecla Esc)">
+          ✖ Salir del Modo Tribunal
+        </button>
+      </div>
+    </div>
+
+    <!-- Buscador y Filtros Rápidos de Proyección -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; gap:12px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:280px; position:relative;">
+        <input type="text" id="inputBuscarModoTribunal" placeholder="🔍 Buscar por código RPT (ej: FC1843), servicio, o nombre del aspirante..." oninput="filtrarModoTribunal()" style="width:100%; padding:10px 16px; border-radius:8px; border:2px solid #3b82f6; background:#1e293b; color:#ffffff; font-size:1rem; box-sizing:border-box;">
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button type="button" class="btn-mt-filtro active" onclick="cambiarFiltroModoTribunal('todos', this)">Todos</button>
+        <button type="button" class="btn-mt-filtro" onclick="cambiarFiltroModoTribunal('adjudicados', this)">Cubiertos</button>
+        <button type="button" class="btn-mt-filtro" onclick="cambiarFiltroModoTribunal('desiertos', this)">Desiertos</button>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px; font-size:0.85rem; color:#94a3b8;">
+        <label style="cursor:pointer; display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="chkMtAnonimizarDNI" onchange="filtrarModoTribunal()"> Anonimizar DNI (LOPD)
+        </label>
+      </div>
+    </div>
+
+    <!-- Contenedor Grid / Listado de Plazas para Proyector -->
+    <div id="contenedorModoTribunalTarjetas" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap:14px;">
+      <!-- Se inyectan las tarjetas de alta legibilidad -->
     </div>
   </div>
 

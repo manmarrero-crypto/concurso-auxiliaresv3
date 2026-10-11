@@ -1257,6 +1257,10 @@ function configurarEventos() {
 function limpiarFormularioAspirante() {
   document.getElementById('inputNombre').value = '';
   document.getElementById('inputDNI').value = '';
+  const selEst = document.getElementById('selectEstadoTramitacion');
+  if (selEst) selEst.value = 'borrador';
+  const inpNot = document.getElementById('inputNotasTribunal');
+  if (inpNot) inpNot.value = '';
   const selSit = document.getElementById('selectSituacionAdmin');
   if (selSit) selSit.value = 'definitiva';
   const inpOrig = document.getElementById('inputPuestoOrigen');
@@ -1415,11 +1419,12 @@ function actualizarVistas() {
             onchange="cambiarPuestoExp(${idx}, this.value)" 
             class="form-control" 
             style="padding: 2px 6px; font-size: 0.8rem; font-weight:600; min-width: 150px;">
-          <small class="help-text">
+          <small class="help-text" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:2px;">
             <select onchange="cambiarTipoPlazaExp(${idx}, this.value)" style="border:none; background:#f1f5f9; padding:1px 4px; border-radius:3px; font-size:0.7rem;">
               <option value="vinculada" ${esVinculada ? 'selected' : ''}>Plaza vinculada (Auxiliar)</option>
               <option value="otra" ${!esVinculada ? 'selected' : ''}>Otra plaza de AAPP</option>
             </select>
+            ${exp.fechaInicio && exp.fechaFin ? `<span style="font-size:0.68rem; color:#64748b;">📅 ${exp.fechaInicio} al ${exp.fechaFin}</span>` : ''}
           </small>
         </td>
         <td>${exp.administracion}</td>
@@ -1987,9 +1992,24 @@ function renderizarResultadosIndividuales(calc) {
         extraHtml = generarHtmlAcordeonCursos('general', estabaAbiertoGen);
       }
 
+      const esTopeAlcanzado = (it.pts >= (it.tope - 0.0001));
+      const pct = Math.min(100, Math.max(0, (it.pts / (it.tope || 1)) * 100));
+      const colorBarra = esTopeAlcanzado ? '#16a34a' : '#2563eb';
+      const badgeTope = esTopeAlcanzado 
+        ? `<span class="badge" style="font-size:0.65rem; font-weight:700; background:#dcfce7; color:#15803d; border:1px solid #86efac; margin-left:4px;" title="Tope máximo reglamentario cubierto: los méritos adicionales no aumentarán la puntuación">🔒 TOPE CUBIERTO</span>`
+        : `<span style="font-size:0.68rem; color:#64748b; font-weight:normal; margin-left:4px;">(${pct.toFixed(0)}%)</span>`;
+
       card.innerHTML = `
-        <div class="desglose-item-header">${it.nombre}</div>
-        <div class="desglose-score">${it.pts.toFixed(4)} <span class="desglose-tope">/ ${it.tope.toFixed(2)}</span></div>
+        <div class="desglose-item-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>${it.nombre}</span>
+          ${badgeTope}
+        </div>
+        <div class="desglose-score" style="margin-top:2px;">
+          ${it.pts.toFixed(4)} <span class="desglose-tope">/ ${it.tope.toFixed(2)}</span>
+        </div>
+        <div style="background:#e2e8f0; border-radius:4px; height:5px; overflow:hidden; margin:4px 0 6px 0;">
+          <div style="background:${colorBarra}; width:${pct}%; height:100%; transition: width 0.3s ease;"></div>
+        </div>
         <div class="desglose-detail">${it.desc}</div>
         ${extraHtml}
       `;
@@ -2090,6 +2110,8 @@ async function guardarAspiranteConcurso() {
       conciliacionConyuge: document.getElementById('chkConcilConyuge').checked,
       antiguedadVinculadaDias: parseInt(document.getElementById('inputAntigVinculada').value, 10) || 0,
       antiguedadOtrasDias: parseInt(document.getElementById('inputAntigOtras').value, 10) || 0,
+      estadoTramitacion: document.getElementById('selectEstadoTramitacion')?.value || 'borrador',
+      notasTribunal: document.getElementById('inputNotasTribunal')?.value.trim() || '',
       merits: {
         ...meritoActual,
         antiguedadVinculadaDias: parseInt(document.getElementById('inputAntigVinculada').value, 10) || 0,
@@ -2496,6 +2518,10 @@ async function cargarAspiranteParaEditar(id) {
 
     document.getElementById('inputNombre').value = asp.nombre || '';
     document.getElementById('inputDNI').value = asp.dni || '';
+    const selEst = document.getElementById('selectEstadoTramitacion');
+    if (selEst) selEst.value = asp.estadoTramitacion || 'borrador';
+    const inpNot = document.getElementById('inputNotasTribunal');
+    if (inpNot) inpNot.value = asp.notasTribunal || '';
     
     // Restaurar puestos solicitados múltiples
     if (asp.puestosSolicitados && Array.isArray(asp.puestosSolicitados) && asp.puestosSolicitados.length > 0) {
@@ -2710,7 +2736,67 @@ function guardarCursoModal() {
   recalcular();
 }
 
-// Modales para Experiencia
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Modales para Experiencia y Detección de Solapamientos
+function calcularDiasExpModal() {
+  const fIniVal = document.getElementById('mExpFechaInicio')?.value;
+  const fFinVal = document.getElementById('mExpFechaFin')?.value;
+  const alertaDiv = document.getElementById('alertaSolapamientoExp');
+
+  if (fIniVal && fFinVal) {
+    const dIni = new Date(fIniVal);
+    const dFin = new Date(fFinVal);
+    if (!isNaN(dIni.getTime()) && !isNaN(dFin.getTime()) && dFin >= dIni) {
+      const diffTime = dFin.getTime() - dIni.getTime();
+      const diffDias = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      const inpDias = document.getElementById('mExpDias');
+      if (inpDias) inpDias.value = diffDias;
+    }
+  }
+
+  if (alertaDiv) {
+    let solapado = false;
+    let mensajeSolapado = '';
+    const currIdx = parseInt(document.getElementById('mExpIdx')?.value, 10);
+
+    if (fIniVal && fFinVal) {
+      const dIni = new Date(fIniVal).getTime();
+      const dFin = new Date(fFinVal).getTime();
+
+      const listaExp = meritoActual.experiencia || [];
+      for (let i = 0; i < listaExp.length; i++) {
+        if (i === currIdx) continue;
+        const e = listaExp[i];
+        if (e.fechaInicio && e.fechaFin) {
+          const eIni = new Date(e.fechaInicio).getTime();
+          const eFin = new Date(e.fechaFin).getTime();
+          if (dIni <= eFin && dFin >= eIni) {
+            solapado = true;
+            mensajeSolapado = `⚠️ <strong>Aviso de Solapamiento:</strong> Las fechas (${fIniVal} a ${fFinVal}) coinciden o se superponen con "${escapeHtml(e.puesto || 'Puesto')}" (${e.fechaInicio} a ${e.fechaFin}). Verifique que no se computen los mismos días por duplicado.`;
+            break;
+          }
+        }
+      }
+    }
+
+    if (solapado) {
+      alertaDiv.innerHTML = mensajeSolapado;
+      alertaDiv.style.display = 'block';
+    } else {
+      alertaDiv.style.display = 'none';
+    }
+  }
+}
+
 function abrirModalNuevaExp() {
   document.getElementById('mExpIdx').value = '-1';
   document.getElementById('modalExpTitulo').textContent = 'Añadir Período de Servicios Prestados';
@@ -2720,6 +2806,10 @@ function abrirModalNuevaExp() {
   document.getElementById('mExpDias').value = '365';
   document.getElementById('mExpTipoPlaza').value = 'vinculada';
   document.getElementById('mExpEspecifica').checked = false;
+  if (document.getElementById('mExpFechaInicio')) document.getElementById('mExpFechaInicio').value = '';
+  if (document.getElementById('mExpFechaFin')) document.getElementById('mExpFechaFin').value = '';
+  const alertaDiv = document.getElementById('alertaSolapamientoExp');
+  if (alertaDiv) alertaDiv.style.display = 'none';
   document.getElementById('modalExp').style.display = 'flex';
 }
 
@@ -2735,6 +2825,9 @@ function abrirModalEditarExp(idx) {
   document.getElementById('mExpDias').value = e.dias || 365;
   document.getElementById('mExpTipoPlaza').value = e.tipoPlaza || 'vinculada';
   document.getElementById('mExpEspecifica').checked = !!e.esEspecificaAmbito;
+  if (document.getElementById('mExpFechaInicio')) document.getElementById('mExpFechaInicio').value = e.fechaInicio || '';
+  if (document.getElementById('mExpFechaFin')) document.getElementById('mExpFechaFin').value = e.fechaFin || '';
+  calcularDiasExpModal();
   document.getElementById('modalExp').style.display = 'flex';
 }
 
@@ -2746,6 +2839,8 @@ function guardarExpModal() {
   const dias = parseInt(document.getElementById('mExpDias').value, 10) || 365;
   const esEspecificaAmbito = document.getElementById('mExpEspecifica').checked;
   const tipoPlaza = document.getElementById('mExpTipoPlaza').value || 'vinculada';
+  const fechaInicio = document.getElementById('mExpFechaInicio')?.value || '';
+  const fechaFin = document.getElementById('mExpFechaFin')?.value || '';
 
   const datosExp = {
     puesto,
@@ -2754,6 +2849,8 @@ function guardarExpModal() {
     dias,
     esEspecificaAmbito,
     tipoPlaza,
+    fechaInicio,
+    fechaFin,
     origenArchivo: idx >= 0 && meritoActual.experiencia[idx] ? meritoActual.experiencia[idx].origenArchivo : 'Añadido manualmente'
   };
 
@@ -2805,10 +2902,16 @@ function cerrarModales() {
   const mExp = document.getElementById('modalExp');
   const mTexto = document.getElementById('modalTexto');
   const mPuesto = document.getElementById('modalNuevoPuesto');
+  const mActa = document.getElementById('modalConfigActa');
+  const mComp = document.getElementById('modalComparadorDesempate');
+  const mSim = document.getElementById('modalSimuladorAlegaciones');
   if (mCurso) mCurso.style.display = 'none';
   if (mExp) mExp.style.display = 'none';
   if (mTexto) mTexto.style.display = 'none';
   if (mPuesto) mPuesto.style.display = 'none';
+  if (mActa) mActa.style.display = 'none';
+  if (mComp) mComp.style.display = 'none';
+  if (mSim) mSim.style.display = 'none';
 }
 
 function abrirModalNuevoPuesto(plazaPrevia = null) {
@@ -3135,7 +3238,7 @@ function renderizarTablaValoraciones() {
   tbody.innerHTML = '';
 
   if (lista.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center empty-state" style="padding:1.5rem;">No se encontraron valoraciones con el criterio indicado.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center empty-state" style="padding:1.5rem;">No se encontraron valoraciones con el criterio indicado.</td></tr>`;
     return;
   }
 
@@ -3194,6 +3297,26 @@ function renderizarTablaValoraciones() {
       ? `<span class="badge badge-neutral" style="font-size:0.65rem; margin-left:4px;">Provisional</span>`
       : `<span class="badge badge-info" style="font-size:0.65rem; margin-left:4px;">Definitivo</span>`;
 
+    // Estado de tramitación y notas confidenciales
+    let estadoBadgeHtml = '';
+    const est = asp.estadoTramitacion || 'borrador';
+    if (est === 'revisado_vocal') {
+      estadoBadgeHtml = '<span class="badge" style="background:#dbeafe; color:#1d4ed8; font-size:0.68rem; border:1px solid #bfdbfe;">🔵 Revisado Vocal</span>';
+    } else if (est === 'validado_tribunal') {
+      estadoBadgeHtml = '<span class="badge" style="background:#dcfce7; color:#15803d; font-size:0.68rem; border:1px solid #86efac;">🟢 Validado</span>';
+    } else if (est === 'alegacion_pendiente') {
+      estadoBadgeHtml = '<span class="badge" style="background:#fee2e2; color:#b91c1c; font-size:0.68rem; border:1px solid #fca5a5;">🔴 Con Alegación</span>';
+    } else {
+      estadoBadgeHtml = '<span class="badge" style="background:#fef3c7; color:#b45309; font-size:0.68rem; border:1px solid #fde68a;">🟡 Borrador</span>';
+    }
+
+    let notasHtml = '';
+    if (asp.notasTribunal && asp.notasTribunal.trim()) {
+      const notaEsc = escapeHtml(asp.notasTribunal);
+      const corta = notaEsc.length > 25 ? notaEsc.substring(0, 25) + '…' : notaEsc;
+      notasHtml = `<div style="font-size:0.68rem; color:#475569; margin-top:3px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${notaEsc}">🔒 <em>${corta}</em></div>`;
+    }
+
     tr.innerHTML = `
       <td style="font-size:0.75rem; color:#64748b; white-space:nowrap;">${fechaStr}</td>
       <td>
@@ -3206,6 +3329,10 @@ function renderizarTablaValoraciones() {
       </td>
       <td>${puestosChipsHtml}</td>
       <td>${adjBadgeHtml}</td>
+      <td>
+        ${estadoBadgeHtml}
+        ${notasHtml}
+      </td>
       <td style="text-align:center; white-space:nowrap;">
         <button type="button" class="btn btn-xs btn-outline" onclick="cargarAspiranteParaEditar('${asp.id}')" title="Cargar y editar en Baremación">✏️ Cargar</button>
         <button type="button" class="btn-icon-danger" onclick="eliminarAspiranteConcurso('${asp.id}')" title="Eliminar valoración" style="margin-left:4px;">&times;</button>
@@ -3856,4 +3983,750 @@ function imprimirFichaOficial() {
   if (!ultimoCalculo) recalcular();
   window.print();
 }
+
+// =========================================================================
+// FASE 3: COMPARADOR OFICIAL DE DESEMPATES (BASE NOVENA)
+// =========================================================================
+
+let dictamenDesempateActual = '';
+
+async function obtenerListaAspirantesCompleta() {
+  try {
+    const res = await fetch(API_BASE + '/api/aspirantes');
+    if (res.ok) {
+      const lista = await res.json();
+      if (Array.isArray(lista) && lista.length > 0) return lista;
+    }
+  } catch (e) {}
+
+  if (datosEstadisticasGlobales && datosEstadisticasGlobales.aspirantes && datosEstadisticasGlobales.aspirantes.length > 0) {
+    return datosEstadisticasGlobales.aspirantes;
+  }
+  return obtenerAspirantesCliente();
+}
+
+async function abrirModalComparador() {
+  const lista = await obtenerListaAspirantesCompleta();
+  const selA = document.getElementById('selectCompAspiranteA');
+  const selB = document.getElementById('selectCompAspiranteB');
+  const selP = document.getElementById('selectCompPuesto');
+
+  if (!selA || !selB) return;
+
+  selA.innerHTML = '';
+  selB.innerHTML = '';
+
+  if (!lista || lista.length === 0) {
+    selA.innerHTML = '<option value="">No hay aspirantes registrados</option>';
+    selB.innerHTML = '<option value="">No hay aspirantes registrados</option>';
+  } else {
+    lista.forEach(asp => {
+      const optA = document.createElement('option');
+      optA.value = asp.id;
+      optA.textContent = `${asp.nombre} (${asp.dni || 'Sin DNI'}) - ${(asp.puntuacionMax || 0).toFixed(4)} pts`;
+      selA.appendChild(optA);
+
+      const optB = document.createElement('option');
+      optB.value = asp.id;
+      optB.textContent = `${asp.nombre} (${asp.dni || 'Sin DNI'}) - ${(asp.puntuacionMax || 0).toFixed(4)} pts`;
+      selB.appendChild(optB);
+    });
+
+    if (lista.length > 1) {
+      selA.selectedIndex = 0;
+      selB.selectedIndex = 1;
+    }
+  }
+
+  // Poblar puestos
+  if (selP) {
+    selP.innerHTML = '<option value="">(Baremación General Concurso)</option>';
+    catalogoPuestos.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id || p.codigoRpt;
+      opt.textContent = `[${p.codigoRpt}] ${p.tipo} (${p.formaProvision})`;
+      selP.appendChild(opt);
+    });
+    if (puestoRankingActual) {
+      selP.value = puestoRankingActual;
+    }
+  }
+
+  document.getElementById('modalComparadorDesempate').style.display = 'flex';
+  ejecutarComparativaDesempate();
+}
+
+async function ejecutarComparativaDesempate() {
+  const selA = document.getElementById('selectCompAspiranteA');
+  const selB = document.getElementById('selectCompAspiranteB');
+  const selP = document.getElementById('selectCompPuesto');
+  const banner = document.getElementById('bannerVeredictoDesempate');
+  const tbody = document.getElementById('tbodyComparativaDesempate');
+  const thA = document.getElementById('thCompNomA');
+  const thB = document.getElementById('thCompNomB');
+
+  const idA = selA ? selA.value : '';
+  const idB = selB ? selB.value : '';
+  const pId = selP ? selP.value : '';
+
+  if (!idA || !idB || idA === idB) {
+    banner.innerHTML = `<div style="color:#b45309; text-align:center; font-weight:600;">⚠️ Selecciona dos aspirantes distintos para comparar su prelación reglamentaria.</div>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center empty-state">Selecciona dos aspirantes distintos.</td></tr>`;
+    dictamenDesempateActual = '';
+    return;
+  }
+
+  const lista = await obtenerListaAspirantesCompleta();
+  const aspA = lista.find(a => a.id === idA);
+  const aspB = lista.find(a => a.id === idB);
+
+  if (!aspA || !aspB) {
+    banner.innerHTML = `<div style="color:#dc2626; text-align:center;">No se encontraron los datos de los aspirantes seleccionados.</div>`;
+    return;
+  }
+
+  const nomA = aspA.nombre || 'Aspirante A';
+  const nomB = aspB.nombre || 'Aspirante B';
+  const dniA = aspA.dni || '';
+  const dniB = aspB.dni || '';
+
+  if (thA) thA.textContent = nomA;
+  if (thB) thB.textContent = nomB;
+
+  // Puesto objetivo o primer puesto
+  const pTarget = catalogoPuestos.find(p => esMismoPuesto(p, pId)) || catalogoPuestos[0] || { formaProvision: 'Concurso ordinario' };
+  const isEsp = pTarget.formaProvision === 'Concurso específico';
+
+  // Calcular puntuación exacta para el puesto
+  const calcFn = (window.calculateScore || calculateScore);
+  const calcA = calcFn({ ...aspA, puestoSolicitado: pTarget }, aspA.merits || {});
+  const calcB = calcFn({ ...aspB, puestoSolicitado: pTarget }, aspB.merits || {});
+
+  // Extraer valores según Base Novena:
+  const ptsFinalA = calcA.puntuacionFinal || 0;
+  const ptsFinalB = calcB.puntuacionFinal || 0;
+
+  const espA = isEsp ? (calcA.fases?.fase2?.puntos || 0) : (calcA.apartados?.meritosEspecificos?.puntos || 0);
+  const espB = isEsp ? (calcB.fases?.fase2?.puntos || 0) : (calcB.apartados?.meritosEspecificos?.puntos || 0);
+
+  const gradoA = isEsp ? (calcA.fases?.fase1?.apartados?.gradoPersonal?.puntos || 0) : (calcA.apartados?.gradoPersonal?.puntos || 0);
+  const gradoB = isEsp ? (calcB.fases?.fase1?.apartados?.gradoPersonal?.puntos || 0) : (calcB.apartados?.gradoPersonal?.puntos || 0);
+
+  const trabA = isEsp ? (calcA.fases?.fase1?.apartados?.trabajoDesarrollado?.puntos || 0) : (calcA.apartados?.trabajoDesarrollado?.puntos || 0);
+  const trabB = isEsp ? (calcB.fases?.fase1?.apartados?.trabajoDesarrollado?.puntos || 0) : (calcB.apartados?.trabajoDesarrollado?.puntos || 0);
+
+  const cursA = isEsp ? (calcA.fases?.fase1?.apartados?.cursosFormacion?.puntos || 0) : (calcA.apartados?.cursosFormacion?.puntos || 0);
+  const cursB = isEsp ? (calcB.fases?.fase1?.apartados?.cursosFormacion?.puntos || 0) : (calcB.apartados?.cursosFormacion?.puntos || 0);
+
+  const antigA = isEsp ? (calcA.fases?.fase1?.apartados?.antiguedad?.puntos || 0) : (calcA.apartados?.antiguedad?.puntos || 0);
+  const antigB = isEsp ? (calcB.fases?.fase1?.apartados?.antiguedad?.puntos || 0) : (calcB.apartados?.antiguedad?.puntos || 0);
+
+  const solA = (aspA.puestosSolicitados || []).find(s => esMismoPuesto(s, pTarget));
+  const solB = (aspB.puestosSolicitados || []).find(s => esMismoPuesto(s, pTarget));
+  const ordPrefA = solA ? (solA.orden || 1) : 999;
+  const ordPrefB = solB ? (solB.orden || 1) : 999;
+
+  const filas = [
+    {
+      criterio: 'PUNTUACIÓN FINAL TOTAL (Regla General)',
+      valA: ptsFinalA,
+      valB: ptsFinalB,
+      esPuntos: true,
+      esDecisivo: false
+    },
+    {
+      criterio: '1º Desempate: Méritos Específicos (Subapartado a / Fase 2)',
+      valA: espA,
+      valB: espB,
+      esPuntos: true,
+      esDecisivo: false
+    },
+    {
+      criterio: '2º Desempate: Grado Personal Reconocido (Subapartado b)',
+      valA: gradoA,
+      valB: gradoB,
+      esPuntos: true,
+      esDecisivo: false
+    },
+    {
+      criterio: '3º Desempate: Trabajo Desarrollado (Subapartado c)',
+      valA: trabA,
+      valB: trabB,
+      esPuntos: true,
+      esDecisivo: false
+    },
+    {
+      criterio: '4º Desempate: Cursos de Formación (Subapartado d)',
+      valA: cursA,
+      valB: cursB,
+      esPuntos: true,
+      esDecisivo: false
+    },
+    {
+      criterio: '5º Desempate: Antigüedad en Administraciones (Subapartado e)',
+      valA: antigA,
+      valB: antigB,
+      esPuntos: true,
+      esDecisivo: false
+    },
+    {
+      criterio: 'Criterio Subsidiario: Orden de Preferencia Solicitado',
+      valA: ordPrefA,
+      valB: ordPrefB,
+      esPuntos: false,
+      menorEsMejor: true,
+      esDecisivo: false
+    }
+  ];
+
+  let criterioGanadorIdx = -1;
+  let ganadorEsA = false;
+
+  for (let i = 0; i < filas.length; i++) {
+    const f = filas[i];
+    const diff = f.menorEsMejor ? (f.valB - f.valA) : (f.valA - f.valB);
+    if (Math.abs(diff) > 0.00001) {
+      criterioGanadorIdx = i;
+      ganadorEsA = (diff > 0);
+      f.esDecisivo = true;
+      break;
+    }
+  }
+
+  let veredictoHtml = '';
+  let ganadorNombre = '';
+  let ganadorDNI = '';
+  let motivoResolucion = '';
+
+  if (criterioGanadorIdx >= 0) {
+    const fDec = filas[criterioGanadorIdx];
+    ganadorNombre = ganadorEsA ? nomA : nomB;
+    ganadorDNI = ganadorEsA ? dniA : dniB;
+    const vG = ganadorEsA ? fDec.valA : fDec.valB;
+    const vP = ganadorEsA ? fDec.valB : fDec.valA;
+    const diffAbs = Math.abs(fDec.valA - fDec.valB);
+
+    if (criterioGanadorIdx === 0) {
+      motivoResolucion = `Mayor puntuación total obtenida (${vG.toFixed(4)} frente a ${vP.toFixed(4)} puntos; diferencia: +${diffAbs.toFixed(4)}).`;
+    } else if (fDec.menorEsMejor) {
+      motivoResolucion = `Mayor preferencia solicitada para esta plaza (${vG}ª opción frente a ${vP}ª opción).`;
+    } else {
+      motivoResolucion = `Aplicación del ${fDec.criterio}: ${vG.toFixed(4)} frente a ${vP.toFixed(4)} puntos (diferencia: +${diffAbs.toFixed(4)}).`;
+    }
+
+    veredictoHtml = `
+      <div style="background:#ecfdf5; border:1px solid #6ee7b7; border-radius:8px; padding:12px 16px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+          <span style="font-size:1.3rem;">🏆</span>
+          <strong style="color:#065f46; font-size:1.05rem;">RESOLUCIÓN VINCULANTE DEL DESEMPATE (BASE NOVENA)</strong>
+        </div>
+        <div style="color:#047857; font-size:0.95rem; line-height:1.45;">
+          El puesto corresponde con prelación a <strong>${escapeHtml(ganadorNombre)}</strong> (DNI: ${escapeHtml(ganadorDNI)}).
+        </div>
+        <div style="margin-top:6px; font-size:0.85rem; color:#065f46; background:#d1fae5; padding:6px 10px; border-radius:6px; border:1px solid #a7f3d0;">
+          ⚖️ <strong>Criterio Determinante:</strong> ${escapeHtml(motivoResolucion)}
+        </div>
+      </div>
+    `;
+
+    dictamenDesempateActual = `RESOLUCIÓN VINCULANTE DE DESEMPATE - CONCURSO AUXILIARES ADMINISTRATIVOS\n` +
+      `Base Novena de la Convocatoria\n\n` +
+      `Aspirantes comparados:\n` +
+      `- ${nomA} (DNI: ${dniA})\n` +
+      `- ${nomB} (DNI: ${dniB})\n` +
+      `Puesto en disputa: [${pTarget.codigoRpt || pTarget.id}] ${pTarget.tipo} (${pTarget.servicio || ''})\n\n` +
+      `FALLO DEL TRIBUNAL:\n` +
+      `Adjudicar la prelación a: ${ganadorNombre} (DNI: ${ganadorDNI})\n` +
+      `Motivo: ${motivoResolucion}\n` +
+      `Fecha: ${new Date().toLocaleDateString('es-ES')}`;
+
+  } else {
+    veredictoHtml = `
+      <div style="background:#fef9c3; border:1px solid #fde047; border-radius:8px; padding:12px 16px; color:#854d0e;">
+        <strong>⚖️ EMPATE TÉCNICO COMPLETO:</strong> Ambos aspirantes cuentan con exactamente las mismas puntuaciones en todos los criterios y subapartados de la Base Novena. Se acudirá al orden alfabético según el sorteo público oficial de la convocatoria.
+      </div>
+    `;
+    dictamenDesempateActual = `EMPATE TÉCNICO COMPLETO entre ${nomA} y ${nomB}. Aplicar criterio residual de sorteo oficial.`;
+  }
+
+  banner.innerHTML = veredictoHtml;
+
+  tbody.innerHTML = '';
+  filas.forEach((f) => {
+    const tr = document.createElement('tr');
+    if (f.esDecisivo) {
+      tr.style.background = '#f0fdf4';
+      tr.style.fontWeight = '700';
+    }
+
+    const valAStr = f.esPuntos ? f.valA.toFixed(4) : (f.valA === 999 ? 'No solicitada' : `${f.valA}ª opción`);
+    const valBStr = f.esPuntos ? f.valB.toFixed(4) : (f.valB === 999 ? 'No solicitada' : `${f.valB}ª opción`);
+
+    const diff = f.menorEsMejor ? (f.valB - f.valA) : (f.valA - f.valB);
+    let cellACls = '';
+    let cellBCls = '';
+    let veredictoBadge = '<span class="badge badge-neutral" style="font-size:0.7rem;">Empate</span>';
+
+    if (Math.abs(diff) > 0.00001) {
+      if (diff > 0) {
+        cellACls = 'comp-winner-cell';
+        veredictoBadge = `<span class="badge badge-success" style="font-size:0.7rem;">Gana A</span>`;
+      } else {
+        cellBCls = 'comp-winner-cell';
+        veredictoBadge = `<span class="badge badge-success" style="font-size:0.7rem;">Gana B</span>`;
+      }
+    } else {
+      cellACls = 'comp-tie-cell';
+      cellBCls = 'comp-tie-cell';
+    }
+
+    const iconoDecisivo = f.esDecisivo ? '⭐ ' : '';
+
+    tr.innerHTML = `
+      <td>${iconoDecisivo}${escapeHtml(f.criterio)}</td>
+      <td class="${cellACls}" style="text-align:right;">${valAStr}</td>
+      <td class="${cellBCls}" style="text-align:right;">${valBStr}</td>
+      <td style="text-align:center;">${veredictoBadge}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function copiarDictamenDesempate() {
+  if (!dictamenDesempateActual) {
+    mostrarToast('Aviso', 'Realiza una comparativa antes de copiar el dictamen.');
+    return;
+  }
+  navigator.clipboard.writeText(dictamenDesempateActual).then(() => {
+    mostrarToast('📋 Dictamen Copiado', 'Texto formal del desempate copiado al portapapeles para el Acta.');
+  }).catch(() => {
+    alert(dictamenDesempateActual);
+  });
+}
+
+// =========================================================================
+// FASE 3: SIMULADOR DE ALEGACIONES Y RESULTAS (WHAT-IF)
+// =========================================================================
+
+let aspiranteSimuladoEnMemoria = null;
+
+async function abrirModalSimulador() {
+  const lista = await obtenerListaAspirantesCompleta();
+  const select = document.getElementById('selectSimAspirante');
+  if (!select) return;
+
+  select.innerHTML = '';
+  if (!lista || lista.length === 0) {
+    select.innerHTML = '<option value="">No hay aspirantes registrados</option>';
+  } else {
+    lista.forEach(asp => {
+      const opt = document.createElement('option');
+      opt.value = asp.id;
+      opt.textContent = `${asp.nombre} (${asp.dni || 'Sin DNI'})`;
+      select.appendChild(opt);
+    });
+  }
+
+  resetearValoresSimulador();
+  document.getElementById('modalSimuladorAlegaciones').style.display = 'flex';
+  cargarDatosSimuladorAspirante();
+}
+
+async function cargarDatosSimuladorAspirante() {
+  const select = document.getElementById('selectSimAspirante');
+  const badge = document.getElementById('simEstadoOriginalBadge');
+  if (!select || !badge) return;
+
+  const aspId = select.value;
+  const lista = await obtenerListaAspirantesCompleta();
+  const asp = lista.find(a => a.id === aspId);
+
+  if (!asp) {
+    badge.textContent = '-';
+    return;
+  }
+
+  if (asp.adjudicacion) {
+    badge.innerHTML = `<span class="badge badge-success" style="font-weight:700;">✓ Titular en [${asp.adjudicacion.codigoRpt || asp.adjudicacion.puestoId}]</span> <span style="font-size:0.75rem; color:#15803d;">(${asp.adjudicacion.tipo})</span>`;
+  } else {
+    badge.innerHTML = `<span class="badge badge-warning" style="font-weight:700;">📋 En Reserva</span> <span style="font-size:0.75rem; color:#854d0e;">(Sin vacante asignada)</span>`;
+  }
+}
+
+function resetearValoresSimulador() {
+  const campos = ['simIncHorasEsp', 'simIncHorasGen', 'simIncDiasCabildo', 'simIncDiasOtras', 'simIncPuntosDirectos'];
+  campos.forEach(c => {
+    const el = document.getElementById(c);
+    if (el) el.value = 0;
+  });
+  const resDiv = document.getElementById('panelResultadosSimulacion');
+  if (resDiv) resDiv.style.display = 'none';
+  const btnCons = document.getElementById('btnConsolidarSimulacion');
+  if (btnCons) btnCons.style.display = 'none';
+  aspiranteSimuladoEnMemoria = null;
+}
+
+async function ejecutarSimulacionAlegacion() {
+  const select = document.getElementById('selectSimAspirante');
+  if (!select) return;
+  const aspId = select.value;
+  if (!aspId) return;
+
+  const listaOriginal = await obtenerListaAspirantesCompleta();
+  const aspOrig = listaOriginal.find(a => a.id === aspId);
+  if (!aspOrig) return;
+
+  const incHorasEsp = parseInt(document.getElementById('simIncHorasEsp')?.value, 10) || 0;
+  const incHorasGen = parseInt(document.getElementById('simIncHorasGen')?.value, 10) || 0;
+  const incDiasCabildo = parseInt(document.getElementById('simIncDiasCabildo')?.value, 10) || 0;
+  const incDiasOtras = parseInt(document.getElementById('simIncDiasOtras')?.value, 10) || 0;
+  const incPuntosDirectos = parseFloat(document.getElementById('simIncPuntosDirectos')?.value) || 0;
+
+  if (incHorasEsp === 0 && incHorasGen === 0 && incDiasCabildo === 0 && incDiasOtras === 0 && incPuntosDirectos === 0) {
+    mostrarToast('Aviso', 'Introduce al menos un incremento para simular la alegación.');
+    return;
+  }
+
+  // Clonar en profundidad todos los aspirantes
+  const aspirantesClon = JSON.parse(JSON.stringify(listaOriginal));
+  const aspSim = aspirantesClon.find(a => a.id === aspId);
+
+  if (!aspSim.merits) aspSim.merits = {};
+  if (!aspSim.merits.cursos) aspSim.merits.cursos = [];
+  if (!aspSim.merits.experiencia) aspSim.merits.experiencia = [];
+
+  if (incHorasEsp > 0) {
+    aspSim.merits.cursos.push({
+      denominacion: `Alegación Estimada (${incHorasEsp}h específicas)`,
+      horas: incHorasEsp,
+      esEspecifico: true,
+      organismo: 'Instituto Canario de Administración Pública',
+      origenArchivo: 'Simulación Alegación'
+    });
+  }
+  if (incHorasGen > 0) {
+    aspSim.merits.cursos.push({
+      denominacion: `Alegación Estimada (${incHorasGen}h generales)`,
+      horas: incHorasGen,
+      esEspecifico: false,
+      organismo: 'Cabildo Insular de Tenerife',
+      origenArchivo: 'Simulación Alegación'
+    });
+  }
+  if (incDiasCabildo > 0) {
+    aspSim.antiguedadVinculadaDias = (aspSim.antiguedadVinculadaDias || 0) + incDiasCabildo;
+    aspSim.merits.antiguedadVinculadaDias = aspSim.antiguedadVinculadaDias;
+  }
+  if (incDiasOtras > 0) {
+    aspSim.antiguedadOtrasDias = (aspSim.antiguedadOtrasDias || 0) + incDiasOtras;
+    aspSim.merits.antiguedadOtrasDias = aspSim.antiguedadOtrasDias;
+  }
+
+  const statFn = (window.computeGlobalStatistics || computeGlobalStatistics);
+  const resBaseline = statFn(listaOriginal, catalogoPuestos);
+  const resSimulado = statFn(aspirantesClon, catalogoPuestos);
+
+  aspiranteSimuladoEnMemoria = aspSim;
+
+  const aspBase = resBaseline.aspirantes.find(a => a.id === aspId);
+  const aspSimResult = resSimulado.aspirantes.find(a => a.id === aspId);
+
+  const plazaBase = aspBase?.adjudicacion?.codigoRpt || 'En Reserva';
+  const plazaSim = aspSimResult?.adjudicacion?.codigoRpt || 'En Reserva';
+  const puntBase = (aspBase?.puntuacionMax || 0);
+  const puntSim = (aspSimResult?.puntuacionMax || 0);
+
+  const afectados = [];
+  resBaseline.aspirantes.forEach(aB => {
+    const aS = resSimulado.aspirantes.find(a => a.id === aB.id);
+    const pB = aB.adjudicacion?.codigoRpt || null;
+    const pS = aS?.adjudicacion?.codigoRpt || null;
+    if (pB !== pS || aB.id === aspId) {
+      afectados.push({
+        id: aB.id,
+        nombre: aB.nombre,
+        dni: aB.dni,
+        esElAlegante: (aB.id === aspId),
+        puntB: aB.puntuacionMax || 0,
+        puntS: aS?.puntuacionMax || 0,
+        plazaB: pB || 'Reserva',
+        plazaS: pS || 'Reserva',
+        tipoImpacto: (aB.id === aspId)
+          ? (pB !== pS ? 'beneficiado' : 'mismo_destino')
+          : (!pB && pS ? 'beneficiado' : (pB && !pS ? 'desplazado' : (pB !== pS ? 'reasignado' : 'neutro')))
+      });
+    }
+  });
+
+  const panel = document.getElementById('panelResultadosSimulacion');
+  const banner = document.getElementById('simResumenBanner');
+  const tbody = document.getElementById('tbodyResultadosSimulacion');
+  const btnCons = document.getElementById('btnConsolidarSimulacion');
+
+  panel.style.display = 'block';
+  btnCons.style.display = 'inline-block';
+
+  let resumenTexto = '';
+  if (plazaBase !== plazaSim) {
+    resumenTexto = `
+      <div style="background:#ecfdf5; border:1px solid #6ee7b7; color:#065f46; padding:10px 14px; border-radius:6px;">
+        <strong>🎉 ¡Impacto Determinante!</strong> Al estimar la alegación, la puntuación de <strong>${escapeHtml(aspOrig.nombre)}</strong> sube de <strong>${puntBase.toFixed(4)}</strong> a <strong>${puntSim.toFixed(4)} pts</strong> (+${(puntSim - puntBase).toFixed(4)} pts).
+        <div style="margin-top:4px;">
+          Pasa de <strong>${escapeHtml(plazaBase)}</strong> ➔ <strong>${escapeHtml(plazaSim)}</strong>.
+          ${afectados.length > 1 ? `Se produce un efecto en cadena que afecta a ${afectados.length - 1} aspirante(s) adicional(es).` : 'Sin desplazamientos colaterales.'}
+        </div>
+      </div>
+    `;
+  } else {
+    resumenTexto = `
+      <div style="background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; padding:10px 14px; border-radius:6px;">
+        <strong>ℹ️ Puntuación Incrementada:</strong> La puntuación sube de <strong>${puntBase.toFixed(4)}</strong> a <strong>${puntSim.toFixed(4)} pts</strong> (+${(puntSim - puntBase).toFixed(4)} pts).
+        <div style="margin-top:4px;">
+          Su plaza final continúa siendo <strong>${escapeHtml(plazaBase)}</strong> (no altera la titularidad de plazas ni genera desplazamientos en el cuadro).
+        </div>
+      </div>
+    `;
+  }
+  banner.innerHTML = resumenTexto;
+
+  tbody.innerHTML = '';
+  afectados.forEach(af => {
+    const tr = document.createElement('tr');
+    let efectoBadge = '';
+    if (af.tipoImpacto === 'beneficiado') {
+      efectoBadge = '<span class="badge badge-success">🟢 Beneficiado</span>';
+    } else if (af.tipoImpacto === 'desplazado') {
+      efectoBadge = '<span class="badge" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5;">🔴 Desplazado</span>';
+    } else if (af.tipoImpacto === 'reasignado') {
+      efectoBadge = '<span class="badge badge-info">🔵 Reasignado</span>';
+    } else {
+      efectoBadge = '<span class="badge badge-neutral">⚪ Mismo Puesto</span>';
+    }
+
+    tr.innerHTML = `
+      <td>
+        <strong>${escapeHtml(af.nombre)}</strong> ${af.esElAlegante ? '<span class="badge badge-primary" style="font-size:0.65rem;">Alegante</span>' : ''}
+        <div style="font-size:0.7rem; color:#64748b;">${escapeHtml(af.dni)}</div>
+      </td>
+      <td style="font-family:monospace;">${af.puntB.toFixed(4)}</td>
+      <td style="font-family:monospace; font-weight:700; color:#1e40af;">${af.puntS.toFixed(4)}</td>
+      <td><span class="badge badge-neutral">${escapeHtml(af.plazaB)}</span></td>
+      <td><strong style="color:#0f172a;">${escapeHtml(af.plazaS)}</strong></td>
+      <td style="text-align:center;">${efectoBadge}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function consolidarAlegacionSimulada() {
+  if (!aspiranteSimuladoEnMemoria) return;
+  const ok = confirm(`¿Confirmas la consolidación oficial de la alegación para "${aspiranteSimuladoEnMemoria.nombre}"?\n\nLos méritos estimados se guardarán permanentemente en la base de datos del concurso.`);
+  if (!ok) return;
+
+  try {
+    const res = await fetch(API_BASE + '/api/aspirantes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(aspiranteSimuladoEnMemoria)
+    });
+
+    if (res.ok) {
+      mostrarToast('Alegación Consolidada', `Méritos actualizados para ${aspiranteSimuladoEnMemoria.nombre}.`);
+      cerrarModales();
+      await cargarVistaEstadisticas();
+      await cargarCuadroAdjudicacion();
+      return;
+    }
+  } catch (e) {}
+
+  guardarAspiranteClienteLocal(aspiranteSimuladoEnMemoria);
+  mostrarToast('Alegación Consolidada Local', `Méritos guardados en almacenamiento local.`);
+  cerrarModales();
+  await cargarVistaEstadisticas();
+  await cargarCuadroAdjudicacion();
+}
+
+// =========================================================================
+// FASE 3: MODO TRIBUNAL / PROYECTOR DE SALA DE JUNTAS
+// =========================================================================
+
+let filtroModoTribunalActual = 'todos';
+
+async function abrirModoTribunal() {
+  const overlay = document.getElementById('modoTribunalOverlay');
+  if (!overlay) return;
+
+  overlay.style.display = 'block';
+
+  try {
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen();
+    }
+  } catch (e) {}
+
+  await renderizarModoTribunal();
+
+  const inp = document.getElementById('inputBuscarModoTribunal');
+  if (inp) {
+    inp.value = '';
+    inp.focus();
+  }
+}
+
+function cerrarModoTribunal() {
+  const overlay = document.getElementById('modoTribunalOverlay');
+  if (overlay) overlay.style.display = 'none';
+
+  try {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen();
+    }
+  } catch (e) {}
+}
+
+function cambiarFiltroModoTribunal(filtro, btn) {
+  filtroModoTribunalActual = filtro;
+  document.querySelectorAll('.btn-mt-filtro').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderizarModoTribunal();
+}
+
+function filtrarModoTribunal() {
+  renderizarModoTribunal();
+}
+
+async function renderizarModoTribunal() {
+  const contenedor = document.getElementById('contenedorModoTribunalTarjetas');
+  if (!contenedor) return;
+
+  const buscarTxt = (document.getElementById('inputBuscarModoTribunal')?.value || '').toLowerCase().trim();
+  const anonimizar = document.getElementById('chkMtAnonimizarDNI')?.checked || false;
+
+  if (!datosEstadisticasGlobales) {
+    await cargarVistaEstadisticas();
+  }
+
+  const puestosDem = (datosEstadisticasGlobales && datosEstadisticasGlobales.puestosDemanda) ? datosEstadisticasGlobales.puestosDemanda : [];
+
+  let lista = puestosDem.map(pd => {
+    const pReal = catalogoPuestos.find(p => esMismoPuesto(p, pd.id)) || pd;
+    return { ...pd, puestoReal: pReal };
+  });
+
+  const totalPuestos = lista.length;
+  const cubiertos = lista.filter(p => p.adjudicatario !== null).length;
+  const vacantes = totalPuestos - cubiertos;
+
+  const elTot = document.getElementById('mtKpiTotal');
+  const elCub = document.getElementById('mtKpiCubiertas');
+  const elVac = document.getElementById('mtKpiVacantes');
+  if (elTot) elTot.textContent = totalPuestos;
+  if (elCub) elCub.textContent = cubiertos;
+  if (elVac) elVac.textContent = vacantes;
+
+  if (filtroModoTribunalActual === 'adjudicados') {
+    lista = lista.filter(p => p.adjudicatario !== null);
+  } else if (filtroModoTribunalActual === 'desiertos') {
+    lista = lista.filter(p => p.adjudicatario === null);
+  }
+
+  if (buscarTxt) {
+    lista = lista.filter(p => {
+      const cod = (p.codigoRpt || p.id || '').toLowerCase();
+      const tipo = (p.tipo || '').toLowerCase();
+      const serv = (p.puestoReal?.servicio || '').toLowerCase();
+      const titular = (p.adjudicatario?.nombre || '').toLowerCase();
+      const dni = (p.adjudicatario?.dni || '').toLowerCase();
+      return cod.includes(buscarTxt) || tipo.includes(buscarTxt) || serv.includes(buscarTxt) || titular.includes(buscarTxt) || dni.includes(buscarTxt);
+    });
+  }
+
+  contenedor.innerHTML = '';
+
+  if (lista.length === 0) {
+    contenedor.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:3rem; color:#94a3b8; font-size:1.1rem;">No se encontraron puestos con el criterio de búsqueda en el proyector.</div>`;
+    return;
+  }
+
+  lista.forEach(p => {
+    const esCubierto = !!p.adjudicatario;
+    const card = document.createElement('div');
+    card.className = `mt-card ${esCubierto ? 'adjudicado' : 'desierto'}`;
+
+    let dniDisplay = '';
+    if (esCubierto && p.adjudicatario.dni) {
+      if (anonimizar) {
+        const d = p.adjudicatario.dni.trim();
+        dniDisplay = d.length >= 8 ? `***${d.slice(-5, -1)}**` : '***' + d.slice(-3);
+      } else {
+        dniDisplay = p.adjudicatario.dni;
+      }
+    }
+
+    let titularHtml = '';
+    if (esCubierto) {
+      titularHtml = `
+        <div style="background:#064e3b; border:1px solid #059669; border-radius:6px; padding:10px 12px; margin-top:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.75rem; font-weight:800; color:#34d399; letter-spacing:0.5px;">✓ TITULAR ADJUDICATARIO/A</span>
+            <span style="font-size:0.75rem; color:#a7f3d0;">${p.adjudicatario.ordenPreferencia || 1}ª opción</span>
+          </div>
+          <div style="font-size:1.15rem; font-weight:800; color:#ffffff; margin:4px 0 2px 0;">
+            ${escapeHtml(p.adjudicatario.nombre)}
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; color:#a7f3d0;">
+            <span style="font-family:monospace;">${escapeHtml(dniDisplay)}</span>
+            <span style="font-size:1.1rem; font-weight:900; color:#4ade80;">${(p.adjudicatario.puntuacionFinal || 0).toFixed(4)} pts</span>
+          </div>
+        </div>
+      `;
+    } else {
+      titularHtml = `
+        <div style="background:#451a03; border:1px solid #b45309; border-radius:6px; padding:10px 12px; margin-top:10px;">
+          <div style="color:#fbbf24; font-weight:800; font-size:0.85rem;">⚠️ PLAZA DESIERTA / VACANTE</div>
+          <div style="color:#fde68a; font-size:0.75rem; margin-top:2px;">Sin adjudicación en fase inicial ni resultas.</div>
+        </div>
+      `;
+    }
+
+    let reservasHtml = '';
+    if (p.reserva1) {
+      const resDni = anonimizar ? (p.reserva1.dni.length >= 8 ? `***${p.reserva1.dni.slice(-5, -1)}**` : '***' + p.reserva1.dni.slice(-3)) : p.reserva1.dni;
+      reservasHtml = `
+        <div style="margin-top:8px; font-size:0.75rem; color:#94a3b8; border-top:1px solid #334155; padding-top:6px;">
+          1º Reserva: <strong style="color:#cbd5e1;">${escapeHtml(p.reserva1.nombre)}</strong> (${escapeHtml(resDni)}) - ${(p.reserva1.puntuacionFinal || 0).toFixed(4)} pts
+        </div>
+      `;
+    }
+
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="background:#2563eb; color:#ffffff; font-weight:900; padding:3px 8px; border-radius:4px; font-size:0.9rem;">
+          ${escapeHtml(p.codigoRpt || p.id)}
+        </span>
+        <span style="font-size:0.75rem; color:#94a3b8;">
+          CD ${p.cd || 16} • ${p.puestoReal?.formaProvision || 'Ordinario'}
+        </span>
+      </div>
+      <div style="font-size:1rem; font-weight:700; color:#f8fafc; margin-top:6px;">
+        ${escapeHtml(p.tipo)}
+      </div>
+      <div style="font-size:0.8rem; color:#94a3b8; margin-top:2px;">
+        🏢 ${escapeHtml(p.puestoReal?.servicio || 'Cabildo Insular de Tenerife')}
+      </div>
+      ${titularHtml}
+      ${reservasHtml}
+    `;
+
+    contenedor.appendChild(card);
+  });
+}
+
+// Tecla Escape para salir del Modo Tribunal
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    cerrarModoTribunal();
+  }
+});
+
 

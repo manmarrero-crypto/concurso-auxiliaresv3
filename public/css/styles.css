@@ -1612,3 +1612,50 @@ body {
     print-color-adjust: exact;
   }
 }
+
+/* ==========================================================================
+   FASE 3: COMPARADOR DE DESEMPATES, SIMULADOR WHAT-IF Y MODO TRIBUNAL
+   ========================================================================== */
+.btn-mt-filtro {
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-mt-filtro:hover, .btn-mt-filtro.active {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+}
+.mt-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 14px 16px;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.mt-card:hover {
+  border-color: #60a5fa;
+  transform: translateY(-2px);
+}
+.mt-card.adjudicado {
+  border-left: 6px solid #22c55e;
+}
+.mt-card.desierto {
+  border-left: 6px solid #ef4444;
+}
+.comp-winner-cell {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  font-weight: 700 !important;
+}
+.comp-tie-cell {
+  background: #fef9c3 !important;
+  color: #854d0e !important;
+}
+
