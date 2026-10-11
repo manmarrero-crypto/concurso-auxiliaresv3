@@ -5,8 +5,8 @@
 // ============================================================================
 // CONTROL DE ACCESO INSTITUCIONAL (PASSWORD GATE)
 // ============================================================================
-const CLAVE_ACCESO_MAESTRA = 'cabildo2026';
-const CLAVE_ACCESO_ALT = 'quemellevelalava';
+const CLAVE_ACCESO_MAESTRA = 'quemellevelalava';
+const CLAVE_ACCESO_ALT = 'cabildo2026';
 
 function verificarAccesoInicial() {
   const gate = document.getElementById('gateAccesoSeguro');

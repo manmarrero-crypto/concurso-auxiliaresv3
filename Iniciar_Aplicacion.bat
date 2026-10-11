@@ -31,7 +31,7 @@ start "" http://localhost:3000
 echo.
 echo ======================================================================
 echo   La aplicacion esta activa en: http://localhost:3000
-echo   Clave de acceso predeterminada: cabildo2026
+echo   Clave de acceso predeterminada: quemellevelalava
 echo.
 echo   (No cierres esta ventana mientras utilices la aplicacion)
 echo ======================================================================
