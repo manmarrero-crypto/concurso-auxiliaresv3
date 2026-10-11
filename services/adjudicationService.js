@@ -547,4 +547,144 @@ function computeRankingForPuesto(puesto, aspirantes, todosLosPuestos = null) {
   };
 }
 
-module.exports = { computeRankingForPuesto, resolverConcursoGlobal, matchesPuesto };
+/**
+ * Calcula el cuadro de mando y estadísticas globales:
+ * - Auditoría de todas las valoraciones registradas con fecha, puestos pedidos y puntuación
+ * - Ranking de puestos más demandados con su adjudicatario actual y los dos primeros de reserva
+ */
+function computeGlobalStatistics(aspirantes, puestos) {
+  const resolucion = resolverConcursoGlobal(puestos, aspirantes);
+
+  // 1. Resumen por aspirante
+  let totalPeticiones = 0;
+  const aspirantesResumen = aspirantes.map(asp => {
+    const asignacion = resolucion.adjudicadoAspirante.get(asp.id);
+    const puestosPedidos = (asp.puestosSolicitados && Array.isArray(asp.puestosSolicitados) && asp.puestosSolicitados.length > 0)
+      ? asp.puestosSolicitados
+      : (asp.puestoSolicitado ? [{ ...asp.puestoSolicitado, orden: 1 }] : []);
+
+    totalPeticiones += puestosPedidos.length;
+
+    // Encontrar evaluaciones de este aspirante
+    const misEvals = resolucion.evaluaciones.filter(e => e.aspId === asp.id);
+    const mejorPunt = misEvals.length > 0 ? Math.max(...misEvals.map(e => e.puntuacionFinal)) : (asp.resultadoCalculo?.total || 0);
+
+    return {
+      id: asp.id,
+      dni: asp.dni,
+      nombre: asp.nombre,
+      createdAt: asp.createdAt || asp.updatedAt || new Date().toISOString(),
+      updatedAt: asp.updatedAt || new Date().toISOString(),
+      situacionAdministrativa: asp.situacionAdministrativa || 'definitiva',
+      puestoOrigen: asp.puestoOrigen || '',
+      puestosSolicitados: puestosPedidos,
+      totalPuestosPedidos: puestosPedidos.length,
+      puntuacionMax: mejorPunt,
+      evaluaciones: misEvals.map(e => ({
+        puestoId: e.puestoId,
+        codigoRpt: e.puestoReal?.codigoRpt || e.puestoId,
+        ordenPreferencia: e.ordenPreferencia,
+        puntuacionFinal: e.puntuacionFinal,
+        superaMinimo: e.superaMinimo
+      })),
+      adjudicacion: asignacion ? {
+        puestoId: asignacion.puestoId,
+        codigoRpt: asignacion.puestoReal?.codigoRpt || asignacion.puestoId,
+        tipo: asignacion.puestoReal?.tipo || 'Auxiliar Administrativo/a',
+        servicio: asignacion.puestoReal?.servicio || '',
+        ordenPreferencia: asignacion.ordenPreferencia,
+        fase: asignacion.fase
+      } : null
+    };
+  });
+
+  // 2. Ranking de puestos por demanda (número de solicitudes)
+  const puestosDemanda = puestos.map(p => {
+    const pId = p.id || p.codigoRpt;
+    const isEsp = p.formaProvision === 'Concurso específico';
+    const dotaciones = p.dotaciones || 1;
+
+    // Candidatos que pidieron este puesto
+    const candidatosQuePidieron = resolucion.evaluaciones.filter(e => e.puestoId === pId);
+    const aptos = candidatosQuePidieron.filter(c => c.superaMinimo);
+    aptos.sort((a, b) => compareDesempate(a, b, isEsp));
+
+    // Determinar adjudicatario(s) y reservas
+    const adjudicados = [];
+    const reservas = [];
+
+    aptos.forEach(cand => {
+      const asignacion = resolucion.adjudicadoAspirante.get(cand.aspId);
+      if (asignacion && asignacion.puestoId === pId) {
+        adjudicados.push({
+          aspId: cand.aspId,
+          dni: cand.dni,
+          nombre: cand.nombre,
+          puntuacionFinal: cand.puntuacionFinal,
+          ordenPreferencia: cand.ordenPreferencia,
+          fase: asignacion.fase
+        });
+      } else if (!asignacion) {
+        reservas.push({
+          aspId: cand.aspId,
+          dni: cand.dni,
+          nombre: cand.nombre,
+          puntuacionFinal: cand.puntuacionFinal,
+          ordenPreferencia: cand.ordenPreferencia
+        });
+      }
+    });
+
+    const adjudicatario = adjudicados[0] || null;
+    const reserva1 = reservas[0] || null;
+    const reserva2 = reservas[1] || null;
+
+    return {
+      puesto: p,
+      id: pId,
+      codigoRpt: p.codigoRpt || p.id,
+      tipo: p.tipo,
+      cd: p.cd || 16,
+      servicio: p.servicio || '',
+      localizacion: p.localizacion || 'S/C',
+      dotaciones,
+      totalSolicitudes: candidatosQuePidieron.length,
+      adjudicatario,
+      adjudicados,
+      reserva1,
+      reserva2,
+      totalReservas: reservas.length,
+      candidatos: candidatosQuePidieron.map(c => ({
+        aspId: c.aspId,
+        dni: c.dni,
+        nombre: c.nombre,
+        ordenPreferencia: c.ordenPreferencia,
+        puntuacionFinal: c.puntuacionFinal,
+        superaMinimo: c.superaMinimo,
+        esAdjudicado: !!(adjudicatario && adjudicatario.aspId === c.aspId)
+      }))
+    };
+  });
+
+  // Ordenar por defecto por mayor número de solicitudes
+  puestosDemanda.sort((a, b) => b.totalSolicitudes - a.totalSolicitudes || (a.codigoRpt || '').localeCompare(b.codigoRpt || '', undefined, { numeric: true }));
+
+  const puestosCubiertos = puestosDemanda.filter(pd => pd.adjudicatario !== null).length;
+  const aspirantesConPlaza = aspirantesResumen.filter(ar => ar.adjudicacion !== null).length;
+  const aspirantesEnReserva = aspirantesResumen.filter(ar => ar.adjudicacion === null).length;
+
+  return {
+    aspirantes: aspirantesResumen,
+    puestosDemanda,
+    metricas: {
+      totalAspirantes: aspirantes.length,
+      totalPeticiones,
+      totalPuestos: puestos.length,
+      puestosCubiertos,
+      aspirantesConPlaza,
+      aspirantesEnReserva
+    }
+  };
+}
+
+module.exports = { computeRankingForPuesto, resolverConcursoGlobal, computeGlobalStatistics, matchesPuesto };

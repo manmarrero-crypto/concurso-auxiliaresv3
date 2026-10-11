@@ -7,12 +7,21 @@ const { extractContentFromBuffer, analyzeTextForMerits } = require('./services/d
 const { calculateScore } = require('./services/calculator');
 const { buildExcelWorkbook, buildRankingExcelWorkbook } = require('./services/excelExporter');
 const { getAllAspirantes, saveAspirante, deleteAspirante } = require('./data/storage');
-const { computeRankingForPuesto } = require('./services/adjudicationService');
+const { computeRankingForPuesto, computeGlobalStatistics } = require('./services/adjudicationService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -176,6 +185,19 @@ app.get('/api/clasificacion/:puestoId', (req, res) => {
     res.json(resultadoRanking);
   } catch (error) {
     res.status(500).json({ error: 'Error al calcular clasificación: ' + error.message });
+  }
+});
+
+// Cuadro de mando y estadísticas globales de solicitudes y demanda
+app.get('/api/estadisticas-globales', (req, res) => {
+  try {
+    const puestosPath = path.join(__dirname, 'data', 'puestos.json');
+    const puestos = JSON.parse(fs.readFileSync(puestosPath, 'utf8'));
+    const aspirantes = getAllAspirantes();
+    const stats = computeGlobalStatistics(aspirantes, puestos);
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al calcular estadísticas globales: ' + error.message });
   }
 });
 

@@ -2,6 +2,79 @@
  * Lógica del cliente (Frontend) para la aplicación de baremación y adjudicación
  */
 
+// ============================================================================
+// CONTROL DE ACCESO INSTITUCIONAL (PASSWORD GATE)
+// ============================================================================
+const CLAVE_ACCESO_MAESTRA = 'cabildo2026';
+const CLAVE_ACCESO_ALT = 'quemellevelalava';
+
+function verificarAccesoInicial() {
+  const gate = document.getElementById('gateAccesoSeguro');
+  if (!gate) return;
+
+  // Comprobar parámetro en la URL ?pass=cabildo2026 o ?clave=cabildo2026 para enlace directo
+  const urlParams = new URLSearchParams(window.location.search);
+  const passParam = urlParams.get('pass') || urlParams.get('clave');
+  if (passParam === CLAVE_ACCESO_MAESTRA || passParam === CLAVE_ACCESO_ALT) {
+    sessionStorage.setItem('concurso_auth', 'granted');
+    gate.style.display = 'none';
+    return;
+  }
+
+  // Comprobar sesión en sessionStorage o localStorage
+  const authSession = sessionStorage.getItem('concurso_auth');
+  const authLocal = localStorage.getItem('concurso_auth');
+  if (authSession === 'granted' || authLocal === 'granted') {
+    gate.style.display = 'none';
+  } else {
+    gate.style.display = 'flex';
+  }
+}
+
+function validarClaveAcceso(e) {
+  if (e) e.preventDefault();
+  const input = document.getElementById('inputClaveAcceso');
+  const errorEl = document.getElementById('errorClaveAcceso');
+  const recordar = document.getElementById('chkRecordarSesion')?.checked;
+  const gate = document.getElementById('gateAccesoSeguro');
+
+  if (!input) return;
+  const clave = input.value.trim();
+
+  if (clave === CLAVE_ACCESO_MAESTRA || clave === CLAVE_ACCESO_ALT) {
+    sessionStorage.setItem('concurso_auth', 'granted');
+    if (recordar) {
+      localStorage.setItem('concurso_auth', 'granted');
+    }
+    if (errorEl) errorEl.style.display = 'none';
+    gate.style.display = 'none';
+  } else {
+    if (errorEl) {
+      errorEl.style.display = 'block';
+    }
+    input.select();
+  }
+}
+
+function conmutarVerClave() {
+  const inp = document.getElementById('inputClaveAcceso');
+  if (inp) {
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+  }
+}
+
+function bloquearSesion() {
+  sessionStorage.removeItem('concurso_auth');
+  localStorage.removeItem('concurso_auth');
+  const gate = document.getElementById('gateAccesoSeguro');
+  const input = document.getElementById('inputClaveAcceso');
+  if (input) input.value = '';
+  if (gate) gate.style.display = 'flex';
+}
+
+// Base de la API: si se abre directamente como archivo local (file://), conecta con http://localhost:3000
+const API_BASE = (window.location.protocol === 'file:') ? 'http://localhost:3000' : '';
+
 let catalogoPuestos = [];
 let puestoSeleccionado = null;
 let meritoActual = {
@@ -17,6 +90,11 @@ let datosRankingActual = null;
 
 // Inicialización al cargar la página
 document.addEventListener('DOMContentLoaded', async () => {
+  verificarAccesoInicial();
+  if (window.location.protocol === 'file:') {
+    const banner = document.getElementById('bannerModoArchivo');
+    if (banner) banner.style.display = 'block';
+  }
   await cargarPuestos();
   await actualizarContadorAspirantes();
   configurarEventos();
@@ -46,12 +124,49 @@ function esMismoPuesto(p1, p2) {
   return false;
 }
 
-// Cargar catálogo de puestos desde el backend
+// Cargar catálogo de puestos multicapa (API local -> data/puestos.json -> catálogo embebido)
 async function cargarPuestos() {
   try {
-    const res = await fetch('/api/puestos');
-    catalogoPuestos = await res.json();
-    
+    let puestosData = null;
+
+    // 1. Intentar API local del servidor Express
+    try {
+      const res = await fetch(API_BASE + '/api/puestos');
+      if (res.ok) {
+        puestosData = await res.json();
+      }
+    } catch (e) {}
+
+    // 2. Si no hay backend (Netlify, servidor web estático), intentar data/puestos.json
+    if (!puestosData || !Array.isArray(puestosData) || puestosData.length === 0) {
+      try {
+        const res2 = await fetch('data/puestos.json');
+        if (res2.ok) {
+          puestosData = await res2.json();
+        }
+      } catch (e) {}
+    }
+
+    // 3. Si se abre desde file:// o sin conexión de red, usar el catálogo embebido
+    if (!puestosData || !Array.isArray(puestosData) || puestosData.length === 0) {
+      if (window.CATALOGO_PUESTOS_EMBEBIDO && Array.isArray(window.CATALOGO_PUESTOS_EMBEBIDO)) {
+        puestosData = window.CATALOGO_PUESTOS_EMBEBIDO;
+      }
+    }
+
+    if (puestosData && Array.isArray(puestosData) && puestosData.length > 0) {
+      catalogoPuestos = puestosData;
+      // Ordenar de forma natural por número de RPT FC... y luego SFC...
+      catalogoPuestos.sort((a, b) => {
+        const codA = (a.codigoRpt || a.id || '').toUpperCase().trim();
+        const codB = (b.codigoRpt || b.id || '').toUpperCase().trim();
+        return codA.localeCompare(codB, undefined, { numeric: true, sensitivity: 'base' });
+      });
+    } else {
+      console.warn('Catálogo de puestos no disponible.');
+      return;
+    }
+
     poblarSelectoresPuestos();
 
     if (catalogoPuestos.length > 0) {
@@ -69,6 +184,43 @@ async function cargarPuestos() {
   }
 }
 
+// Comparador universal de puestos según el criterio seleccionado (RPT FC, CD, Nombre, etc.)
+function compararPuestos(a, b, criterioOrden) {
+  const codA = (a.codigoRpt || a.id || '').toUpperCase().trim();
+  const codB = (b.codigoRpt || b.id || '').toUpperCase().trim();
+
+  switch (criterioOrden) {
+    case 'rpt_desc':
+      return codB.localeCompare(codA, undefined, { numeric: true, sensitivity: 'base' });
+    case 'cd_desc':
+      return (b.cd || 0) - (a.cd || 0) || codA.localeCompare(codB, undefined, { numeric: true, sensitivity: 'base' });
+    case 'cd_asc':
+      return (a.cd || 0) - (b.cd || 0) || codA.localeCompare(codB, undefined, { numeric: true, sensitivity: 'base' });
+    case 'nombre_asc':
+      return (a.tipo || '').localeCompare(b.tipo || '', 'es', { sensitivity: 'base' }) || codA.localeCompare(codB, undefined, { numeric: true, sensitivity: 'base' });
+    case 'nombre_desc':
+      return (b.tipo || '').localeCompare(a.tipo || '', 'es', { sensitivity: 'base' }) || codA.localeCompare(codB, undefined, { numeric: true, sensitivity: 'base' });
+    case 'localizacion_asc':
+      return (a.localizacion || '').localeCompare(b.localizacion || '', 'es', { sensitivity: 'base' }) || codA.localeCompare(codB, undefined, { numeric: true, sensitivity: 'base' });
+    case 'localizacion_desc':
+      return (b.localizacion || '').localeCompare(a.localizacion || '', 'es', { sensitivity: 'base' }) || codA.localeCompare(codB, undefined, { numeric: true, sensitivity: 'base' });
+    case 'tipo_asc':
+      return (a.tipo || '').localeCompare(b.tipo || '', 'es', { sensitivity: 'base' }) || (b.cd || 0) - (a.cd || 0) || codA.localeCompare(codB, undefined, { numeric: true, sensitivity: 'base' });
+    case 'servicio_asc':
+      return (a.servicio || '').localeCompare(b.servicio || '', 'es', { sensitivity: 'base' }) || codA.localeCompare(codB, undefined, { numeric: true, sensitivity: 'base' });
+    case 'unicos_primero': {
+      const unA = a.esPuestoUnico ? 1 : 0;
+      const unB = b.esPuestoUnico ? 1 : 0;
+      return (unB - unA) || codA.localeCompare(codB, undefined, { numeric: true, sensitivity: 'base' });
+    }
+    case 'entidad':
+      return (a.entidad || '').localeCompare(b.entidad || '', 'es', { sensitivity: 'base' }) || codA.localeCompare(codB, undefined, { numeric: true, sensitivity: 'base' });
+    case 'rpt_asc':
+    default:
+      return codA.localeCompare(codB, undefined, { numeric: true, sensitivity: 'base' });
+  }
+}
+
 // Poblar desplegables de puestos (ficha individual y ranking)
 function poblarSelectoresPuestos(filtroRankingText = '') {
   const select = document.getElementById('selectPuesto');
@@ -78,7 +230,7 @@ function poblarSelectoresPuestos(filtroRankingText = '') {
     catalogoPuestos.forEach((p, index) => {
       const opt = document.createElement('option');
       opt.value = index;
-      opt.textContent = `[${p.codigoRpt || p.id}] ${p.tipo} - ${p.servicio || 'Servicio'} [${p.localizacion || 'S/C'}]`;
+      opt.textContent = `[${p.codigoRpt || p.id}] (CD ${p.cd || 16}) ${p.tipo} - ${p.servicio || 'Servicio'} [${p.localizacion || 'S/C'}]`;
       select.appendChild(opt);
     });
     if (valorPrevio !== '') select.value = valorPrevio;
@@ -88,23 +240,144 @@ function poblarSelectoresPuestos(filtroRankingText = '') {
   if (selectRanking) {
     const valorPrevioRank = puestoRankingActual || selectRanking.value;
     selectRanking.innerHTML = '';
-    const q = filtroRankingText.toLowerCase().trim();
+    const q = (typeof filtroRankingText === 'string' && filtroRankingText !== '') 
+      ? filtroRankingText.toLowerCase().trim() 
+      : (document.getElementById('filtroTextoRanking')?.value || '').toLowerCase().trim();
 
-    catalogoPuestos.forEach((p) => {
-      const label = `[${p.codigoRpt || p.id}] ${p.tipo} - ${p.servicio || ''} [${p.localizacion || 'S/C'}]`;
+    // Obtener criterio de ordenación para el ranking
+    const criterioOrdenRank = document.getElementById('ordenRankingPuestosSelect')?.value || 'rpt_asc';
+
+    // Clonar lista y ordenar según el criterio seleccionado
+    let puestosParaRanking = [...catalogoPuestos];
+    puestosParaRanking.sort((a, b) => compararPuestos(a, b, criterioOrdenRank));
+
+    let opcionSeleccionadaExiste = false;
+
+    puestosParaRanking.forEach((p) => {
+      const cdTxt = p.cd ? ` (CD ${p.cd})` : '';
+      const label = `[${p.codigoRpt || p.id}]${cdTxt} ${p.tipo} - ${p.servicio || ''} [${p.localizacion || 'S/C'}]`;
       if (q && !label.toLowerCase().includes(q)) {
         return;
       }
       const optR = document.createElement('option');
-      optR.value = p.id || p.codigoRpt;
+      const val = p.id || p.codigoRpt;
+      optR.value = val;
       optR.textContent = label;
       selectRanking.appendChild(optR);
+
+      if (val === valorPrevioRank) {
+        opcionSeleccionadaExiste = true;
+      }
     });
 
-    if (valorPrevioRank && selectRanking.querySelector(`option[value="${valorPrevioRank}"]`)) {
+    if (opcionSeleccionadaExiste) {
       selectRanking.value = valorPrevioRank;
+    } else if (selectRanking.options.length > 0) {
+      selectRanking.selectedIndex = 0;
+      puestoRankingActual = selectRanking.value;
     }
   }
+}
+
+// Control del menú de botones rápidos para ordenar el catálogo
+function cambiarOrdenPill(criterioBase) {
+  const select = document.getElementById('ordenPuestosCatalogoSelect');
+  if (!select) return;
+
+  let nuevoValor = criterioBase;
+  // Alternar asc/desc si el usuario pulsa repetidamente el mismo botón
+  if (criterioBase === 'rpt_asc') {
+    nuevoValor = (select.value === 'rpt_asc') ? 'rpt_desc' : 'rpt_asc';
+  } else if (criterioBase === 'cd_desc') {
+    nuevoValor = (select.value === 'cd_desc') ? 'cd_asc' : 'cd_desc';
+  } else if (criterioBase === 'nombre_asc') {
+    nuevoValor = (select.value === 'nombre_asc') ? 'nombre_desc' : 'nombre_asc';
+  } else if (criterioBase === 'localizacion_asc') {
+    nuevoValor = (select.value === 'localizacion_asc') ? 'localizacion_desc' : 'localizacion_asc';
+  }
+
+  select.value = nuevoValor;
+  actualizarPillsOrdenActivo(nuevoValor);
+  renderizarChecklistPuestos();
+}
+
+function actualizarPillsOrdenActivo(criterio) {
+  const pills = [
+    { id: 'pillSortRpt', match: ['rpt_asc', 'rpt_desc'], labelAsc: '🔢 Código FC ▲', labelDesc: '🔢 Código FC ▼' },
+    { id: 'pillSortCd', match: ['cd_desc', 'cd_asc'], labelAsc: '⭐ Nivel CD ▲', labelDesc: '⭐ Nivel CD ▼' },
+    { id: 'pillSortNombre', match: ['nombre_asc', 'nombre_desc'], labelAsc: '📝 Nombre A-Z', labelDesc: '📝 Nombre Z-A' },
+    { id: 'pillSortLoc', match: ['localizacion_asc', 'localizacion_desc'], labelAsc: '📍 Localización A-Z', labelDesc: '📍 Localización Z-A' },
+    { id: 'pillSortTipo', match: ['tipo_asc'], labelAsc: '🏷️ Tipo' },
+    { id: 'pillSortServ', match: ['servicio_asc'], labelAsc: '🏢 Servicio' },
+    { id: 'pillSortUnicos', match: ['unicos_primero'], labelAsc: '✨ Únicos' }
+  ];
+
+  pills.forEach(p => {
+    const el = document.getElementById(p.id);
+    if (!el) return;
+    const esActivo = p.match.includes(criterio);
+    if (esActivo) {
+      el.className = 'btn btn-xs btn-primary btn-sort-pill';
+      if (criterio.includes('desc') && p.labelDesc) {
+        el.textContent = p.labelDesc;
+      } else {
+        el.textContent = p.labelAsc;
+      }
+    } else {
+      el.className = 'btn btn-xs btn-outline btn-sort-pill';
+      el.textContent = p.labelAsc.replace(' ▲', '').replace(' ▼', '');
+    }
+  });
+}
+
+// Control del menú de botones rápidos para ordenar en el Cuadro de Adjudicación
+function cambiarOrdenRankingPill(criterioBase) {
+  const select = document.getElementById('ordenRankingPuestosSelect');
+  if (!select) return;
+
+  let nuevoValor = criterioBase;
+  // Alternar asc/desc si el usuario pulsa repetidamente el mismo botón
+  if (criterioBase === 'rpt_asc') {
+    nuevoValor = (select.value === 'rpt_asc') ? 'rpt_desc' : 'rpt_asc';
+  } else if (criterioBase === 'cd_desc') {
+    nuevoValor = (select.value === 'cd_desc') ? 'cd_asc' : 'cd_desc';
+  } else if (criterioBase === 'nombre_asc') {
+    nuevoValor = (select.value === 'nombre_asc') ? 'nombre_desc' : 'nombre_asc';
+  } else if (criterioBase === 'localizacion_asc') {
+    nuevoValor = (select.value === 'localizacion_asc') ? 'localizacion_desc' : 'localizacion_asc';
+  }
+
+  select.value = nuevoValor;
+  actualizarPillsRankingOrdenActivo(nuevoValor);
+  poblarSelectoresPuestos();
+}
+
+function actualizarPillsRankingOrdenActivo(criterio) {
+  const pills = [
+    { id: 'pillRankSortRpt', match: ['rpt_asc', 'rpt_desc'], labelAsc: '🔢 Código FC ▲', labelDesc: '🔢 Código FC ▼' },
+    { id: 'pillRankSortCd', match: ['cd_desc', 'cd_asc'], labelAsc: '⭐ Nivel CD ▲', labelDesc: '⭐ Nivel CD ▼' },
+    { id: 'pillRankSortNombre', match: ['nombre_asc', 'nombre_desc'], labelAsc: '📝 Nombre A-Z', labelDesc: '📝 Nombre Z-A' },
+    { id: 'pillRankSortLoc', match: ['localizacion_asc', 'localizacion_desc'], labelAsc: '📍 Localización A-Z', labelDesc: '📍 Localización Z-A' },
+    { id: 'pillRankSortServ', match: ['servicio_asc'], labelAsc: '🏢 Servicio' },
+    { id: 'pillRankSortUnicos', match: ['unicos_primero'], labelAsc: '✨ Únicos' }
+  ];
+
+  pills.forEach(p => {
+    const el = document.getElementById(p.id);
+    if (!el) return;
+    const esActivo = p.match.includes(criterio);
+    if (esActivo) {
+      el.className = 'btn btn-xs btn-primary btn-sort-pill';
+      if (criterio.includes('desc') && p.labelDesc) {
+        el.textContent = p.labelDesc;
+      } else {
+        el.textContent = p.labelAsc;
+      }
+    } else {
+      el.className = 'btn btn-xs btn-outline btn-sort-pill';
+      el.textContent = p.labelAsc.replace(' ▲', '').replace(' ▼', '');
+    }
+  });
 }
 
 function renderizarChecklistPuestos() {
@@ -149,6 +422,10 @@ function renderizarChecklistPuestos() {
 
     return true;
   });
+
+  // Aplicar orden seleccionado (RPT FC..., Nivel CD, Nombre, Localización, Tipo, Servicio, etc.)
+  const criterioOrden = document.getElementById('ordenPuestosCatalogoSelect')?.value || 'rpt_asc';
+  puestosFiltrados.sort((itemA, itemB) => compararPuestos(itemA.p, itemB.p, criterioOrden));
 
   if (puestosFiltrados.length === 0) {
     container.innerHTML = `
@@ -585,19 +862,25 @@ function sincronizarAntiguedadAutomatica() {
 
 // Configuración de eventos de UI
 function configurarEventos() {
-  // Navegación entre vistas principales
+  // Navegación entre vistas principales (1. Baremación, 2. Cuadro Adjudicación, 3. Panel Global)
   document.getElementById('navBtnIndividual').addEventListener('click', () => {
     document.getElementById('navBtnIndividual').classList.add('active');
     document.getElementById('navBtnAdjudicacion').classList.remove('active');
+    document.getElementById('navBtnEstadisticas')?.classList.remove('active');
     document.getElementById('vistaIndividual').style.display = 'block';
     document.getElementById('vistaAdjudicacion').style.display = 'none';
+    const vEst = document.getElementById('vistaEstadisticas');
+    if (vEst) vEst.style.display = 'none';
   });
 
   document.getElementById('navBtnAdjudicacion').addEventListener('click', async () => {
     document.getElementById('navBtnAdjudicacion').classList.add('active');
     document.getElementById('navBtnIndividual').classList.remove('active');
+    document.getElementById('navBtnEstadisticas')?.classList.remove('active');
     document.getElementById('vistaIndividual').style.display = 'none';
     document.getElementById('vistaAdjudicacion').style.display = 'block';
+    const vEst = document.getElementById('vistaEstadisticas');
+    if (vEst) vEst.style.display = 'none';
 
     if (puestoSeleccionado) {
       puestoRankingActual = puestoSeleccionado.id || puestoSeleccionado.codigoRpt;
@@ -607,6 +890,42 @@ function configurarEventos() {
 
     await cargarCuadroAdjudicacion();
   });
+
+  const navEst = document.getElementById('navBtnEstadisticas');
+  if (navEst) {
+    navEst.addEventListener('click', async () => {
+      navEst.classList.add('active');
+      document.getElementById('navBtnIndividual').classList.remove('active');
+      document.getElementById('navBtnAdjudicacion').classList.remove('active');
+      document.getElementById('vistaIndividual').style.display = 'none';
+      document.getElementById('vistaAdjudicacion').style.display = 'none';
+      const vEst = document.getElementById('vistaEstadisticas');
+      if (vEst) vEst.style.display = 'block';
+
+      await cargarVistaEstadisticas();
+    });
+  }
+
+  // Filtros de la Vista 3 (Panel Global de Solicitudes)
+  const fValInput = document.getElementById('filtroValoracionesInput');
+  if (fValInput) {
+    fValInput.addEventListener('input', () => renderizarTablaValoraciones());
+  }
+
+  const fDemTexto = document.getElementById('filtroPuestosDemandadosTexto');
+  if (fDemTexto) {
+    fDemTexto.addEventListener('input', () => renderizarRankingPuestosDemandados());
+  }
+
+  const selFiltroPuestoDem = document.getElementById('selectFiltroPuestoDemandado');
+  if (selFiltroPuestoDem) {
+    selFiltroPuestoDem.addEventListener('change', () => filtrarPuestoDemandadoPorSelect());
+  }
+
+  const ordDemSelect = document.getElementById('ordenPuestosDemandadosSelect');
+  if (ordDemSelect) {
+    ordDemSelect.addEventListener('change', () => renderizarRankingPuestosDemandados());
+  }
 
   // Selector puesto en ranking
   document.getElementById('selectPuestoRanking').addEventListener('change', (e) => {
@@ -622,6 +941,15 @@ function configurarEventos() {
     });
   }
 
+  // Criterio de ordenación de los puestos en el Cuadro de Adjudicación
+  const ordRankSelect = document.getElementById('ordenRankingPuestosSelect');
+  if (ordRankSelect) {
+    ordRankSelect.addEventListener('change', (e) => {
+      actualizarPillsRankingOrdenActivo(e.target.value);
+      poblarSelectoresPuestos();
+    });
+  }
+
   // Filtros de puestos en Tarjeta 1
   const fTxt = document.getElementById('filtroTextoPuestos');
   if (fTxt) fTxt.addEventListener('input', () => renderizarChecklistPuestos());
@@ -631,6 +959,14 @@ function configurarEventos() {
 
   const fEnt = document.getElementById('filtroEntidadPuestosSelect');
   if (fEnt) fEnt.addEventListener('change', () => renderizarChecklistPuestos());
+
+  const fOrden = document.getElementById('ordenPuestosCatalogoSelect');
+  if (fOrden) {
+    fOrden.addEventListener('change', (e) => {
+      actualizarPillsOrdenActivo(e.target.value);
+      renderizarChecklistPuestos();
+    });
+  }
 
   const btnSolo = document.getElementById('btnVerSoloSeleccionados');
   if (btnSolo) {
@@ -656,7 +992,7 @@ function configurarEventos() {
   if (btnCargarMuestra) {
     btnCargarMuestra.addEventListener('click', async () => {
       try {
-        const res = await fetch('/api/aspirantes/cargar-muestra', { method: 'POST' });
+        const res = await fetch(API_BASE + '/api/aspirantes/cargar-muestra', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
           await actualizarContadorAspirantes();
@@ -919,7 +1255,7 @@ async function procesarArchivos(files) {
   }
 
   try {
-    const res = await fetch('/api/upload-document', {
+    const res = await fetch(API_BASE + '/api/upload-document', {
       method: 'POST',
       body: formData
     });
@@ -972,7 +1308,11 @@ async function procesarArchivos(files) {
       mostrarToast('Documentos Procesados', `${files.length} archivo(s) analizados y méritos extraídos.`);
     }
   } catch (err) {
-    alert('Error al procesar archivos: ' + err.message);
+    if (window.location.protocol === 'file:' || err.message.includes('Failed to fetch')) {
+      alert('⚠️ Para el procesamiento y análisis automático de documentos PDF y Word:\n\n👉 Se requiere que el servidor local esté activo en: http://localhost:3000\n(Haz doble clic en "Iniciar_Aplicacion.bat" para iniciarlo y abre http://localhost:3000 en el navegador).\n\nDetalle: ' + err.message);
+    } else {
+      alert('Error al procesar archivos: ' + err.message);
+    }
   } finally {
     statusEl.style.display = 'none';
     document.getElementById('fileInput').value = '';
@@ -1408,8 +1748,9 @@ async function recalcular() {
     idiomas: meritoActual.idiomas
   };
 
+  let result = null;
   try {
-    const res = await fetch('/api/calculate', {
+    const res = await fetch(API_BASE + '/api/calculate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1424,10 +1765,27 @@ async function recalcular() {
         }
       })
     });
+    if (res.ok) {
+      result = await res.json();
+    }
+  } catch (err) {}
 
-    const result = await res.json();
-    ultimoCalculo = result;
+  // Fallback cálculo en el navegador (Netlify, static hosting o sin conexión)
+  if (!result && typeof window.calculateScore === 'function') {
+    result = window.calculateScore(candidateData, {
+      cursos: meritoActual.cursos,
+      experiencia: meritoActual.experiencia,
+      titulaciones: meritoActual.titulaciones,
+      idiomas: meritoActual.idiomas,
+      antiguedadVinculadaDias: candidateData.antiguedadVinculadaDias,
+      antiguedadOtrasDias: candidateData.antiguedadOtrasDias
+    });
+  }
 
+  if (!result) return;
+  ultimoCalculo = result;
+
+  try {
     if (result.cursosDetalle) {
       result.cursosDetalle.forEach((cd, i) => {
         if (meritoActual.cursos[i]) {
@@ -1690,12 +2048,22 @@ async function guardarAspiranteConcurso() {
       resultadoCalculo: ultimoCalculo
     };
 
-    const res = await fetch('/api/aspirantes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(aspirante)
-    });
-    const data = await res.json();
+    let data = null;
+    try {
+      const res = await fetch(API_BASE + '/api/aspirantes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(aspirante)
+      });
+      if (res.ok) data = await res.json();
+    } catch (e) {}
+
+    // Fallback de guardado local (para Netlify o funcionamiento sin servidor)
+    if (!data || !data.success) {
+      guardarAspiranteClienteLocal(aspirante);
+      data = { success: true };
+    }
+
     if (data.success) {
       await actualizarContadorAspirantes();
       const numP = puestosFinales.length;
@@ -1719,13 +2087,40 @@ async function guardarAspiranteConcurso() {
   }
 }
 
+function obtenerAspirantesCliente() {
+  try {
+    const raw = localStorage.getItem('concurso_aspirantes_local');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return [];
+}
+
+function guardarAspiranteClienteLocal(asp) {
+  try {
+    let list = obtenerAspirantesCliente();
+    const id = asp.id || (asp.dni ? asp.dni.trim().toUpperCase() : 'asp_' + Date.now());
+    asp.id = id;
+    const idx = list.findIndex(a => a.id === id);
+    if (idx >= 0) list[idx] = asp; else list.push(asp);
+    localStorage.setItem('concurso_aspirantes_local', JSON.stringify(list));
+    return true;
+  } catch (e) { return false; }
+}
+
 async function actualizarContadorAspirantes() {
   try {
-    const res = await fetch('/api/aspirantes');
-    const lista = await res.json();
-    const badge = document.getElementById('totalAspirantesBadge');
-    if (badge) badge.textContent = lista.length;
+    const res = await fetch(API_BASE + '/api/aspirantes');
+    if (res.ok) {
+      const lista = await res.json();
+      const badge = document.getElementById('totalAspirantesBadge');
+      if (badge) badge.textContent = lista.length;
+      return;
+    }
   } catch (e) {}
+
+  const listaLocal = obtenerAspirantesCliente();
+  const badge = document.getElementById('totalAspirantesBadge');
+  if (badge) badge.textContent = listaLocal.length;
 }
 
 let filtroRankingActivo = 'todos';
@@ -1736,11 +2131,28 @@ async function cargarCuadroAdjudicacion() {
   const tbody = document.getElementById('tbodyRanking');
   tbody.innerHTML = `<tr><td colspan="12" class="text-center empty-state"><div class="spinner" style="margin: 0 auto 8px auto;"></div>Calculando prelación oficial y desempates...</td></tr>`;
 
+  let data = null;
   try {
-    const res = await fetch(`/api/clasificacion/${encodeURIComponent(puestoRankingActual)}`);
-    const data = await res.json();
-    datosRankingActual = data;
+    const res = await fetch(`${API_BASE}/api/clasificacion/${encodeURIComponent(puestoRankingActual)}`);
+    if (res.ok) {
+      data = await res.json();
+    }
+  } catch (err) {}
 
+  // Fallback con el motor de adjudicación cliente (Netlify, estático o offline)
+  if (!data && typeof window.computeRankingForPuesto === 'function') {
+    const pTarget = catalogoPuestos.find(p => esMismoPuesto(p, puestoRankingActual)) || { id: puestoRankingActual, codigoRpt: puestoRankingActual, tipo: 'Puesto', cd: 16, formaProvision: 'Concurso ordinario', dotaciones: 1 };
+    const aspirantesLocales = obtenerAspirantesCliente();
+    data = window.computeRankingForPuesto(pTarget, aspirantesLocales, catalogoPuestos);
+  }
+
+  if (!data) {
+    tbody.innerHTML = `<tr><td colspan="12" class="text-center empty-state" style="padding:2rem; color:#dc2626;">Error al cargar datos del ranking.</td></tr>`;
+    return;
+  }
+  datosRankingActual = data;
+
+  try {
     // Actualizar Banner Informativo del Puesto en el Ranking
     const banner = document.getElementById('rankingPuestoBanner');
     if (banner && data.puesto) {
@@ -2027,7 +2439,7 @@ function togglePanelBolsaResultas() {
 // Cargar aspirante existente para edición
 async function cargarAspiranteParaEditar(id) {
   try {
-    const res = await fetch('/api/aspirantes');
+    const res = await fetch(API_BASE + '/api/aspirantes');
     const lista = await res.json();
     const asp = lista.find(a => a.id === id);
     if (!asp) return;
@@ -2105,7 +2517,7 @@ async function cargarAspiranteParaEditar(id) {
 async function eliminarAspiranteConcurso(id) {
   if (!confirm('¿Seguro que deseas eliminar este aspirante del concurso?')) return;
   try {
-    await fetch(`/api/aspirantes/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    await fetch(`${API_BASE}/api/aspirantes/${encodeURIComponent(id)}`, { method: 'DELETE' });
     await actualizarContadorAspirantes();
     await cargarCuadroAdjudicacion();
     mostrarToast('Aspirante Eliminado', 'Se ha eliminado del cuadro del concurso.');
@@ -2122,7 +2534,7 @@ async function exportarRankingExcel() {
   }
 
   try {
-    const res = await fetch('/api/export-ranking-excel', {
+    const res = await fetch(API_BASE + '/api/export-ranking-excel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rankingData: datosRankingActual })
@@ -2167,7 +2579,7 @@ async function descargarExcelIndividual() {
   };
 
   try {
-    const res = await fetch('/api/export-excel', {
+    const res = await fetch(API_BASE + '/api/export-excel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2409,7 +2821,7 @@ async function guardarNuevoPuestoModal() {
   };
 
   try {
-    const res = await fetch('/api/puestos', {
+    const res = await fetch(API_BASE + '/api/puestos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(nuevoPuesto)
@@ -2434,7 +2846,7 @@ async function guardarNuevoPuestoModal() {
 async function incorporarPlazaLiberada(plazaJsonEncoded) {
   try {
     const plaza = JSON.parse(decodeURIComponent(plazaJsonEncoded));
-    const res = await fetch('/api/puestos/incorporar-liberado', {
+    const res = await fetch(API_BASE + '/api/puestos/incorporar-liberado', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ plazaLiberada: plaza })
@@ -2499,7 +2911,7 @@ async function escanearCarpetaRuta(folderPath) {
   if (textEl) textEl.textContent = `Escaneando carpeta: ${folderPath}...`;
 
   try {
-    const res = await fetch('/api/scan-folder', {
+    const res = await fetch(API_BASE + '/api/scan-folder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ folderPath })
@@ -2555,6 +2967,498 @@ async function escanearCarpetaRuta(folderPath) {
     alert('Error al escanear la carpeta: ' + err.message);
   } finally {
     statusEl.style.display = 'none';
+  }
+}
+
+// =========================================================================
+// VISTA 3: PANEL GLOBAL DE SOLICITUDES Y RANKING DE PUESTOS MÁS DEMANDADOS
+// =========================================================================
+
+let datosEstadisticasGlobales = null;
+
+// Cargar datos de la Vista 3: Cuadro de Mando y Estadísticas de Solicitudes
+async function cargarVistaEstadisticas() {
+  const tbodyAuditoria = document.getElementById('tbodyAuditoriaValoraciones');
+  const contenedorDemandados = document.getElementById('contenedorTarjetasPuestosDemandados');
+  if (tbodyAuditoria) tbodyAuditoria.innerHTML = `<tr><td colspan="6" class="text-center empty-state"><div class="spinner" style="margin:0 auto 8px auto;"></div>Calculando estadísticas y cuadro de solicitudes...</td></tr>`;
+  if (contenedorDemandados) contenedorDemandados.innerHTML = `<div class="text-center empty-state" style="padding:2rem;"><div class="spinner" style="margin:0 auto 8px auto;"></div>Procesando demanda de puestos...</div>`;
+
+  let data = null;
+  // 1. Intentar backend Express
+  try {
+    const res = await fetch(API_BASE + '/api/estadisticas-globales');
+    if (res.ok) {
+      data = await res.json();
+    }
+  } catch (e) {}
+
+  // 2. Fallback offline / Netlify con motor cliente
+  if (!data && typeof window.computeGlobalStatistics === 'function') {
+    const aspLocales = obtenerAspirantesCliente();
+    data = window.computeGlobalStatistics(aspLocales, catalogoPuestos);
+  }
+
+  if (!data) {
+    if (tbodyAuditoria) tbodyAuditoria.innerHTML = `<tr><td colspan="6" class="text-center empty-state" style="color:#dc2626;">No se pudieron cargar los datos estadísticos.</td></tr>`;
+    if (contenedorDemandados) contenedorDemandados.innerHTML = `<div class="text-center empty-state" style="color:#dc2626;">Error al cargar puestos demandados.</div>`;
+    return;
+  }
+
+  datosEstadisticasGlobales = data;
+
+  // Actualizar KPIs superiores
+  const m = data.metricas || {};
+  const elTotAsp = document.getElementById('kpiTotalAspirantes');
+  if (elTotAsp) elTotAsp.textContent = m.totalAspirantes || 0;
+  const elSubAsp = document.getElementById('kpiAspirantesSub');
+  if (elSubAsp) elSubAsp.textContent = `${m.aspirantesConPlaza || 0} con plaza asignada`;
+
+  const elTotPet = document.getElementById('kpiTotalPeticiones');
+  if (elTotPet) elTotPet.textContent = m.totalPeticiones || 0;
+  const elSubPet = document.getElementById('kpiPeticionesSub');
+  if (elSubPet) {
+    const ratio = m.totalAspirantes > 0 ? (m.totalPeticiones / m.totalAspirantes).toFixed(1) : 0;
+    elSubPet.textContent = `Media de ${ratio} puestos por aspirante`;
+  }
+
+  const elCubiertos = document.getElementById('kpiPuestosCubiertos');
+  if (elCubiertos) elCubiertos.textContent = `${m.puestosCubiertos || 0} / ${m.totalPuestos || 0}`;
+  const elSubCub = document.getElementById('kpiPuestosCubiertosSub');
+  if (elSubCub) {
+    const pct = m.totalPuestos > 0 ? Math.round((m.puestosCubiertos / m.totalPuestos) * 100) : 0;
+    elSubCub.textContent = `${pct}% de puestos con adjudicación`;
+  }
+
+  const elReserva = document.getElementById('kpiAspirantesReserva');
+  if (elReserva) elReserva.textContent = m.aspirantesEnReserva || 0;
+  const elSubRes = document.getElementById('kpiAspirantesReservaSub');
+  if (elSubRes) elSubRes.textContent = `En lista de reserva oficial (Base Novena)`;
+
+  const elCountHead = document.getElementById('countValoracionesHeader');
+  if (elCountHead) elCountHead.textContent = (data.aspirantes || []).length;
+
+  // Poblar desplegable de salto rápido en puestos demandados
+  poblarSelectFiltroPuestosDemandados();
+
+  // Renderizar ambas columnas
+  renderizarTablaValoraciones();
+  renderizarRankingPuestosDemandados();
+}
+
+function poblarSelectFiltroPuestosDemandados() {
+  const select = document.getElementById('selectFiltroPuestoDemandado');
+  if (!select || !datosEstadisticasGlobales || !datosEstadisticasGlobales.puestosDemanda) return;
+
+  const valorPrevio = select.value;
+  select.innerHTML = '<option value="">🔍 Todos los puestos (Ver ranking completo)</option>';
+
+  datosEstadisticasGlobales.puestosDemanda.forEach(pd => {
+    const opt = document.createElement('option');
+    opt.value = pd.id;
+    const petTxt = pd.totalSolicitudes === 1 ? '1 solicitud' : `${pd.totalSolicitudes} solicitudes`;
+    const adjTxt = pd.adjudicatario ? `✓ Titular: ${pd.adjudicatario.nombre}` : '⚠️ Desierto';
+    opt.textContent = `[${pd.codigoRpt}] (CD ${pd.cd}) ${pd.tipo} - ${petTxt} [${adjTxt}]`;
+    select.appendChild(opt);
+  });
+
+  if (valorPrevio && select.querySelector(`option[value="${valorPrevio}"]`)) {
+    select.value = valorPrevio;
+  }
+}
+
+function renderizarTablaValoraciones() {
+  const tbody = document.getElementById('tbodyAuditoriaValoraciones');
+  if (!tbody || !datosEstadisticasGlobales) return;
+
+  const filtro = (document.getElementById('filtroValoracionesInput')?.value || '').toLowerCase().trim();
+  let lista = datosEstadisticasGlobales.aspirantes || [];
+
+  if (filtro) {
+    lista = lista.filter(a => {
+      const nom = (a.nombre || '').toLowerCase();
+      const dni = (a.dni || '').toLowerCase();
+      const puestosStr = (a.puestosSolicitados || []).map(p => `${p.codigoRpt || p.id} ${p.tipo} ${p.servicio}`).join(' ').toLowerCase();
+      return nom.includes(filtro) || dni.includes(filtro) || puestosStr.includes(filtro);
+    });
+  }
+
+  tbody.innerHTML = '';
+
+  if (lista.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center empty-state" style="padding:1.5rem;">No se encontraron valoraciones con el criterio indicado.</td></tr>`;
+    return;
+  }
+
+  lista.forEach(asp => {
+    const tr = document.createElement('tr');
+
+    // Formatear Fecha
+    let fechaStr = '-';
+    if (asp.createdAt) {
+      try {
+        const d = new Date(asp.createdAt);
+        fechaStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+      } catch (e) {
+        fechaStr = asp.createdAt.substring(0, 16);
+      }
+    }
+
+    // Puestos solicitados (chips ordenados)
+    let puestosChipsHtml = '';
+    const pSolicitados = asp.puestosSolicitados || [];
+    if (pSolicitados.length > 0) {
+      puestosChipsHtml = pSolicitados.map((ps, idx) => {
+        const ord = ps.orden || (idx + 1);
+        const esElAdjudicado = asp.adjudicacion && (asp.adjudicacion.puestoId === (ps.id || ps.codigoRpt) || asp.adjudicacion.codigoRpt === ps.codigoRpt);
+        const cls = esElAdjudicado ? 'chip-pref adj' : 'chip-pref';
+        const icono = esElAdjudicado ? '✓ ' : '';
+        return `<span class="${cls}" title="${ps.tipo} - ${ps.servicio || ''}">${icono}${ord}ª: ${ps.codigoRpt || ps.id}</span>`;
+      }).join(' ');
+    } else {
+      puestosChipsHtml = '<span style="color:#94a3b8; font-size:0.75rem;">Sin puestos especificados</span>';
+    }
+
+    // Adjudicación
+    let adjBadgeHtml = '';
+    if (asp.adjudicacion) {
+      adjBadgeHtml = `
+        <span class="badge badge-success" style="font-weight:700;">
+          ✓ ${asp.adjudicacion.codigoRpt || asp.adjudicacion.puestoId}
+        </span>
+        <div style="font-size:0.72rem; color:#15803d; margin-top:2px;">
+          ${asp.adjudicacion.tipo} (${asp.adjudicacion.ordenPreferencia}ª opción)
+        </div>
+      `;
+    } else {
+      adjBadgeHtml = `
+        <span class="badge badge-warning" style="font-weight:600;">
+          📋 En Reserva
+        </span>
+        <div style="font-size:0.7rem; color:#64748b; margin-top:2px;">
+          Sin vacante en sus opciones
+        </div>
+      `;
+    }
+
+    const situacionBadge = (asp.situacionAdministrativa === 'provisional')
+      ? `<span class="badge badge-neutral" style="font-size:0.65rem; margin-left:4px;">Provisional</span>`
+      : `<span class="badge badge-info" style="font-size:0.65rem; margin-left:4px;">Definitivo</span>`;
+
+    tr.innerHTML = `
+      <td style="font-size:0.75rem; color:#64748b; white-space:nowrap;">${fechaStr}</td>
+      <td>
+        <strong style="color:#0f172a;">${asp.nombre}</strong> ${situacionBadge}
+        <div style="font-size:0.75rem; color:#475569; font-family:monospace;">${asp.dni}</div>
+      </td>
+      <td>
+        <strong style="font-size:1.05rem; color:#1e40af;">${(asp.puntuacionMax || 0).toFixed(4)}</strong>
+        <div style="font-size:0.7rem; color:#64748b;">${pSolicitados.length} puesto(s)</div>
+      </td>
+      <td>${puestosChipsHtml}</td>
+      <td>${adjBadgeHtml}</td>
+      <td style="text-align:center; white-space:nowrap;">
+        <button type="button" class="btn btn-xs btn-outline" onclick="cargarAspiranteParaEditar('${asp.id}')" title="Cargar y editar en Baremación">✏️ Cargar</button>
+        <button type="button" class="btn-icon-danger" onclick="eliminarAspiranteConcurso('${asp.id}')" title="Eliminar valoración" style="margin-left:4px;">&times;</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderizarRankingPuestosDemandados() {
+  const container = document.getElementById('contenedorTarjetasPuestosDemandados');
+  if (!container || !datosEstadisticasGlobales) return;
+
+  const filtroTexto = (document.getElementById('filtroPuestosDemandadosTexto')?.value || '').toLowerCase().trim();
+  const selectPuesto = document.getElementById('selectFiltroPuestoDemandado')?.value || '';
+  const criterioOrden = document.getElementById('ordenPuestosDemandadosSelect')?.value || 'mas_pedidos';
+
+  let puestos = [...(datosEstadisticasGlobales.puestosDemanda || [])];
+
+  // Filtro por selección puntual en desplegable
+  if (selectPuesto) {
+    puestos = puestos.filter(pd => pd.id === selectPuesto || pd.codigoRpt === selectPuesto);
+  }
+
+  // Filtro de texto
+  if (filtroTexto) {
+    puestos = puestos.filter(pd => {
+      const match = (pd.codigoRpt && pd.codigoRpt.toLowerCase().includes(filtroTexto)) ||
+                    (pd.tipo && pd.tipo.toLowerCase().includes(filtroTexto)) ||
+                    (pd.servicio && pd.servicio.toLowerCase().includes(filtroTexto)) ||
+                    (pd.localizacion && pd.localizacion.toLowerCase().includes(filtroTexto));
+      return match;
+    });
+  }
+
+  // Filtro / Ordenación
+  if (criterioOrden === 'solo_cubiertos') {
+    puestos = puestos.filter(pd => pd.adjudicatario !== null);
+  } else if (criterioOrden === 'solo_desiertos') {
+    puestos = puestos.filter(pd => pd.adjudicatario === null);
+  }
+
+  // Aplicar orden
+  puestos.sort((a, b) => {
+    switch (criterioOrden) {
+      case 'menos_pedidos':
+        return a.totalSolicitudes - b.totalSolicitudes || (a.codigoRpt || '').localeCompare(b.codigoRpt || '', undefined, { numeric: true });
+      case 'codigo_fc':
+        return (a.codigoRpt || '').localeCompare(b.codigoRpt || '', undefined, { numeric: true });
+      case 'nivel_cd':
+        return (b.cd || 0) - (a.cd || 0) || b.totalSolicitudes - a.totalSolicitudes;
+      case 'mas_pedidos':
+      default:
+        return b.totalSolicitudes - a.totalSolicitudes || (a.codigoRpt || '').localeCompare(b.codigoRpt || '', undefined, { numeric: true });
+    }
+  });
+
+  container.innerHTML = '';
+
+  if (puestos.length === 0) {
+    container.innerHTML = `<div class="text-center empty-state" style="padding:2rem;">No se encontraron puestos con los filtros seleccionados.</div>`;
+    return;
+  }
+
+  const maxSolicitudes = Math.max(1, ...puestos.map(p => p.totalSolicitudes));
+
+  puestos.forEach((pd) => {
+    const card = document.createElement('div');
+    card.className = 'puesto-demandado-card';
+    card.id = `cardPuestoDemandado_${pd.id}`;
+
+    const porcentajeBarra = Math.round((pd.totalSolicitudes / maxSolicitudes) * 100);
+
+    // Adjudicatario Box
+    let adjBoxHtml = '';
+    if (pd.adjudicatario) {
+      const adj = pd.adjudicatario;
+      adjBoxHtml = `
+        <div class="adj-box-green">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;">
+            <div>
+              <span class="badge badge-success" style="font-size:0.75rem; font-weight:700;">✓ Titular Adjudicatario/a</span>
+              <strong style="margin-left:6px; color:#14532d; font-size:0.9rem;">${adj.nombre}</strong>
+              <span style="font-family:monospace; color:#166534; font-size:0.8rem; margin-left:4px;">(${adj.dni})</span>
+            </div>
+            <div>
+              <strong style="color:#15803d; font-size:1.05rem;">${adj.puntuacionFinal.toFixed(4)} pts</strong>
+              <span class="badge badge-neutral" style="margin-left:4px; font-size:0.7rem;">${adj.ordenPreferencia}ª opción</span>
+            </div>
+          </div>
+          <div style="font-size:0.725rem; color:#166534; margin-top:2px;">
+            Fase de Adjudicación: <strong>${adj.fase === 'inicial' ? 'Fase Inicial (Ordinaria)' : (adj.fase === '1a_resultas' ? '1ª Resultas' : '2ª Resultas')}</strong>
+          </div>
+        </div>
+      `;
+    } else {
+      adjBoxHtml = `
+        <div class="empty-slot-box">
+          ⚠️ <strong>Plaza Vacante / Desierta:</strong> Ningún candidato supera la puntuación mínima reglamentaria o ningún aspirante la ha solicitado.
+        </div>
+      `;
+    }
+
+    // Reservas Box
+    let reservaBoxHtml = '';
+    const r1 = pd.reserva1;
+    const r2 = pd.reserva2;
+
+    if (r1 || r2) {
+      reservaBoxHtml = `
+        <div class="reserva-box-amber">
+          <div style="font-size:0.75rem; font-weight:700; color:#92400e; margin-bottom:4px; display:flex; justify-content:space-between;">
+            <span>📋 Lista de Reserva Inmediata (Base Novena)</span>
+            <span class="badge badge-neutral" style="font-size:0.675rem;">${pd.totalReservas} en reserva</span>
+          </div>
+          ${r1 ? `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px dashed #fde68a;">
+              <div>
+                <strong>1º Reserva:</strong> ${r1.nombre} <span style="font-family:monospace; color:#78350f; font-size:0.75rem;">(${r1.dni})</span>
+              </div>
+              <div>
+                <strong style="color:#b45309;">${r1.puntuacionFinal.toFixed(4)} pts</strong>
+                <span style="font-size:0.7rem; color:#78350f; margin-left:4px;">(${r1.ordenPreferencia}ª opc)</span>
+              </div>
+            </div>
+          ` : '<div style="font-size:0.725rem; color:#92400e;">1º Reserva: Sin candidatos</div>'}
+          ${r2 ? `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; margin-top:2px;">
+              <div>
+                <strong>2º Reserva:</strong> ${r2.nombre} <span style="font-family:monospace; color:#78350f; font-size:0.75rem;">(${r2.dni})</span>
+              </div>
+              <div>
+                <strong style="color:#b45309;">${r2.puntuacionFinal.toFixed(4)} pts</strong>
+                <span style="font-size:0.7rem; color:#78350f; margin-left:4px;">(${r2.ordenPreferencia}ª opc)</span>
+              </div>
+            </div>
+          ` : '<div style="font-size:0.725rem; color:#92400e; margin-top:2px;">2º Reserva: Sin segundo reserva disponible</div>'}
+        </div>
+      `;
+    } else {
+      reservaBoxHtml = `
+        <div class="empty-slot-box">
+          ℹ️ <strong>Lista de Reserva:</strong> No hay aspirantes en reserva para este puesto actualmente.
+        </div>
+      `;
+    }
+
+    // Tabla de aspirantes desplegable para este puesto
+    const candidatos = pd.candidatos || [];
+    let candidatosListaHtml = '';
+    if (candidatos.length > 0) {
+      candidatosListaHtml = `
+        <div id="desplegableAspirantesPuesto_${pd.id}" class="aspirantes-desplegable-container" style="display:none;">
+          <table class="data-table" style="font-size:0.75rem;">
+            <thead>
+              <tr style="background:#f1f5f9;">
+                <th style="width:30px;">#</th>
+                <th>Aspirante / DNI</th>
+                <th>Opción Pedida</th>
+                <th>Puntuación</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${candidatos.map((c, i) => `
+                <tr style="${c.esAdjudicado ? 'background:#f0fdf4;' : ''}">
+                  <td>${i + 1}º</td>
+                  <td><strong>${c.nombre}</strong> <span style="font-family:monospace; color:#64748b;">(${c.dni})</span></td>
+                  <td><span class="chip-pref">${c.ordenPreferencia}ª opción</span></td>
+                  <td><strong style="color:${c.esAdjudicado ? '#15803d' : '#1e40af'};">${c.puntuacionFinal.toFixed(4)}</strong></td>
+                  <td>
+                    ${c.esAdjudicado
+                      ? '<span class="badge badge-success" style="font-size:0.65rem;">✓ Adjudicado</span>'
+                      : (c.superaMinimo
+                        ? '<span class="badge badge-warning" style="font-size:0.65rem;">En Reserva</span>'
+                        : '<span class="badge badge-danger" style="font-size:0.65rem;">No apto</span>')}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    const solLabel = pd.totalSolicitudes === 1 ? '1 solicitud' : `${pd.totalSolicitudes} solicitudes`;
+    const vacLabel = pd.dotaciones === 1 ? '1 vacante' : `${pd.dotaciones} vacantes`;
+
+    card.innerHTML = `
+      <div class="puesto-demandado-header">
+        <div>
+          <span class="badge badge-primary" style="font-size:0.8rem; font-weight:700;">${pd.codigoRpt}</span>
+          <span class="puesto-demandado-title" style="margin-left:6px;">${pd.tipo}</span>
+          <span class="badge badge-neutral" style="margin-left:4px;">CD: ${pd.cd}</span>
+          <div class="puesto-demandado-meta">
+            🏢 <strong>${pd.servicio || 'Servicio General'}</strong> • 📍 ${pd.localizacion || 'S/C'} • 🏷️ ${vacLabel}
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <span class="puesto-demandado-solicitudes-badge">
+            👥 <strong>${solLabel}</strong>
+          </span>
+        </div>
+      </div>
+
+      <!-- Barra visual de demanda -->
+      <div class="puesto-demandado-progress">
+        <div class="puesto-demandado-progress-bar" style="width: ${porcentajeBarra}%;"></div>
+      </div>
+
+      <!-- Recuadro Adjudicatario -->
+      ${adjBoxHtml}
+
+      <!-- Recuadro Reservas -->
+      ${reservaBoxHtml}
+
+      <!-- Botón Desplegar todos los candidatos -->
+      ${candidatos.length > 0 ? `
+        <button type="button" class="btn-toggle-aspirantes-puesto" onclick="toggleDesplegableAspirantesPuesto('${pd.id}')">
+          👥 Ver los ${candidatos.length} aspirantes que pidieron este puesto (▼ Desplegar)
+        </button>
+        ${candidatosListaHtml}
+      ` : ''}
+    `;
+
+    container.appendChild(card);
+  });
+}
+
+function toggleDesplegableAspirantesPuesto(pId) {
+  const el = document.getElementById(`desplegableAspirantesPuesto_${pId}`);
+  if (!el) return;
+  const estaOculto = (el.style.display === 'none' || !el.style.display);
+  el.style.display = estaOculto ? 'block' : 'none';
+}
+
+function filtrarPuestoDemandadoPorSelect() {
+  renderizarRankingPuestosDemandados();
+  const select = document.getElementById('selectFiltroPuestoDemandado');
+  if (select && select.value) {
+    const cardEl = document.getElementById(`cardPuestoDemandado_${select.value}`);
+    if (cardEl) {
+      cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      cardEl.style.borderColor = '#2563eb';
+      cardEl.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.2)';
+      setTimeout(() => {
+        cardEl.style.borderColor = '';
+        cardEl.style.boxShadow = '';
+      }, 2500);
+    }
+  }
+}
+
+// Exportar resumen completo de auditoría a Excel (.xlsx)
+function exportarAuditoriaExcel() {
+  if (!datosEstadisticasGlobales || typeof XLSX === 'undefined') {
+    alert('No hay datos disponibles para exportar o la librería Excel no ha cargado.');
+    return;
+  }
+
+  try {
+    const wb = XLSX.utils.book_new();
+
+    // Hoja 1: Auditoría de Valoraciones
+    const rowsValoraciones = (datosEstadisticasGlobales.aspirantes || []).map((a, idx) => ({
+      'Nº': idx + 1,
+      'Fecha Registro': a.createdAt ? a.createdAt.substring(0, 19).replace('T', ' ') : '',
+      'DNI': a.dni,
+      'Nombre y Apellidos': a.nombre,
+      'Situación': a.situacionAdministrativa,
+      'Puesto Origen': a.puestoOrigen,
+      'Puntuación Obtenida': a.puntuacionMax,
+      'Puestos Solicitados': (a.puestosSolicitados || []).map(p => `[${p.orden}ª] ${p.codigoRpt || p.id}`).join(', '),
+      'Puesto Adjudicado': a.adjudicacion ? `${a.adjudicacion.codigoRpt} (${a.adjudicacion.tipo})` : 'EN RESERVA',
+      'Fase Adjudicación': a.adjudicacion ? a.adjudicacion.fase : 'Sin adjudicación'
+    }));
+
+    const wsVal = XLSX.utils.json_to_sheet(rowsValoraciones);
+    XLSX.utils.book_append_sheet(wb, wsVal, 'Valoraciones Registradas');
+
+    // Hoja 2: Ranking de Puestos y Demanda
+    const rowsPuestos = (datosEstadisticasGlobales.puestosDemanda || []).map((p, idx) => ({
+      'Ranking Demanda': idx + 1,
+      'Código RPT': p.codigoRpt,
+      'Denominación': p.tipo,
+      'Nivel CD': p.cd,
+      'Servicio': p.servicio,
+      'Localización': p.localizacion,
+      'Total Solicitudes': p.totalSolicitudes,
+      'Titular Adjudicatario': p.adjudicatario ? p.adjudicatario.nombre : 'VACANTE / DESIERTO',
+      'DNI Titular': p.adjudicatario ? p.adjudicatario.dni : '',
+      'Puntos Titular': p.adjudicatario ? p.adjudicatario.puntuacionFinal : '',
+      '1º de Reserva': p.reserva1 ? `${p.reserva1.nombre} (${p.reserva1.dni}) - ${p.reserva1.puntuacionFinal.toFixed(4)} pts` : 'Sin reserva 1',
+      '2º de Reserva': p.reserva2 ? `${p.reserva2.nombre} (${p.reserva2.dni}) - ${p.reserva2.puntuacionFinal.toFixed(4)} pts` : 'Sin reserva 2'
+    }));
+
+    const wsPuestos = XLSX.utils.json_to_sheet(rowsPuestos);
+    XLSX.utils.book_append_sheet(wb, wsPuestos, 'Demanda de Puestos y Reservas');
+
+    XLSX.writeFile(wb, `Auditoria_Concurso_Auxiliares_Cabildo_${new Date().toISOString().substring(0,10)}.xlsx`);
+    mostrarToast('Excel Descargado', 'Auditoría de valoraciones y ranking de demanda guardado en Excel.');
+  } catch (err) {
+    alert('Error al generar Excel: ' + err.message);
   }
 }
 

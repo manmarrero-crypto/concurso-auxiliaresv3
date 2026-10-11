@@ -1,6 +1,8 @@
 @echo off
+cd /d "%~dp0"
 title Concurso de Auxiliares - Cabildo de Tenerife
 chcp 65001 >nul
+
 echo ======================================================================
 echo   APLICACION DE BAREMACION Y ADJUDICACION - CABILDO DE TENERIFE
 echo ======================================================================
@@ -8,18 +10,30 @@ echo.
 
 where node >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [ERROR] No se ha detectado Node.js en este ordenador.
-    echo Para ejecutar la aplicacion se necesita Node.js instalado.
-    echo Puedes descargarlo e instalarlo gratis desde: https://nodejs.org
+    echo [AVISO] No se ha detectado Node.js en este ordenador.
+    echo Puedes instalar Node.js gratis desde https://nodejs.org si deseas
+    echo utilizar el servidor local y el analisis automatico de PDFs y Word.
+    echo.
+    echo Abriendo la aplicacion directamente en tu navegador web...
+    start "" "public\index.html"
     echo.
     pause
     exit /b
 )
 
-echo Iniciando el servidor local del concurso en el puerto 3000...
-echo Abriendo la aplicacion en tu navegador web...
-echo.
+echo Comprobando e iniciando servidor local...
+start /b node server.js
 timeout /t 2 /nobreak >nul
+
+echo Abriendo la aplicacion en tu navegador...
 start "" http://localhost:3000
-node server.js
+
+echo.
+echo ======================================================================
+echo   La aplicacion esta activa en: http://localhost:3000
+echo   Clave de acceso predeterminada: cabildo2026
+echo.
+echo   (No cierres esta ventana mientras utilices la aplicacion)
+echo ======================================================================
+echo.
 pause

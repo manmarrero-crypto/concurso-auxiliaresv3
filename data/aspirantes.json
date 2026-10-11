@@ -1539,23 +1539,25 @@
       }
     ],
     "puestoSolicitado": {
-      "id": "FC1843",
-      "codigoRpt": "FC1843",
-      "tipo": "Auxiliar Administrativo/a",
-      "formaProvision": "Concurso ordinario",
-      "cd": 16,
-      "ce": 28,
+      "id": "FC1897",
+      "codigoRpt": "FC1897",
+      "tipo": "Gestor/a de Contenidos Digitales",
+      "formaProvision": "Concurso específico",
+      "cd": 18,
+      "ce": 32,
       "dotaciones": 1,
-      "consejeria": "Cabildo Insular de Tenerife",
+      "consejeria": "CONSEJERÍA INSULAR DE PRESIDENCIA, ADMINISTRACIÓN Y SERVICIO",
       "entidad": "Cabildo de Tenerife",
-      "servicio": "Servicio Administrativo de Proyectos Estratégicos",
-      "unidad": "Administrativa de Proyectos Estratégicos",
+      "servicio": "Servicio Administrativo de Atención Ciudadana y Calidad de los Servicios",
+      "unidad": "Canales Digitales",
       "localizacion": "Zona metropolitana Santa Cruz de Tenerife- La Laguna",
-      "requisitoExperiencia": "18 meses en la Subescala Administrativa de Administración General",
-      "minimoSuperar": 1.5,
-      "esPuestoUnico": false,
-      "descripcion": "Servicio Administrativo de Proyectos Estratégicos (Administrativa de Proyectos Estratégicos) [Zona metropolitana Santa Cruz de Tenerife- La Laguna]",
-      "denominacionLarga": "[FC1843] Auxiliar Administrativo/a - Servicio Administrativo de Proyectos Estratégicos (Administrativa de Proyectos Estratégicos) - Zona metropolitana Santa Cruz de Tenerife- La Laguna"
+      "requisitoExperiencia": "12 meses en Cabildo en nivel 16/18, o 30 meses en AAPP (mínimo 12 en Cabildo)",
+      "minimoSuperar": 4,
+      "minimoFase1": 2.5,
+      "minimoFase2": 1.5,
+      "esPuestoUnico": true,
+      "descripcion": "Servicio Administrativo de Atención Ciudadana y Calidad de los Servicios (Canales Digitales) [Zona metropolitana Santa Cruz de Tenerife- La Laguna]",
+      "denominacionLarga": "[FC1897] Gestor/a de Contenidos Digitales - Servicio Administrativo de Atención Ciudadana y Calidad de los Servicios (Canales Digitales) - Zona metropolitana Santa Cruz de Tenerife- La Laguna"
     },
     "situacionAdministrativa": "provisional",
     "puestoOrigen": "",
@@ -1577,8 +1579,8 @@
           "esEspecifico": true,
           "incluido": true,
           "origenArchivo": "CURSOS DE FOMRACIÃN.docx",
-          "puntosBrutos": 7,
-          "factorPuntos": 0.02
+          "puntosBrutos": 3.5,
+          "factorPuntos": 0.01
         },
         {
           "titulo": "Cursos de Formación Transversal / General",
@@ -1612,8 +1614,8 @@
           "tipoPlaza": "vinculada",
           "esEspecificaAmbito": false,
           "origenArchivo": "TIEMPO TRABAJADO.docx",
-          "puntosBrutos": 1.1111,
-          "factor": 0.000304414
+          "puntosBrutos": 1.4286,
+          "factor": 0.000391389
         },
         {
           "puesto": "Auxiliar Administrativo/a",
@@ -1623,8 +1625,8 @@
           "tipoPlaza": "vinculada",
           "esEspecificaAmbito": false,
           "origenArchivo": "TIEMPO TRABAJADO.docx",
-          "puntosBrutos": 0.9333,
-          "factor": 0.000365297
+          "puntosBrutos": 1.1667,
+          "factor": 0.000456621
         },
         {
           "puesto": "Jefe/a de Negociado",
@@ -1634,8 +1636,8 @@
           "tipoPlaza": "vinculada",
           "esEspecificaAmbito": false,
           "origenArchivo": "TIEMPO TRABAJADO.docx",
-          "puntosBrutos": 0.4,
-          "factor": 0.000365297
+          "puntosBrutos": 0.6,
+          "factor": 0.000547945
         },
         {
           "puesto": "Gestor/a de Contenidos Digitales",
@@ -1645,8 +1647,8 @@
           "tipoPlaza": "vinculada",
           "esEspecificaAmbito": true,
           "origenArchivo": "TIEMPO TRABAJADO.docx",
-          "puntosBrutos": 0.4749,
-          "factor": 0.000365297
+          "puntosBrutos": 0.7123,
+          "factor": 0.000547945
         }
       ],
       "titulaciones": [],
@@ -1762,54 +1764,68 @@
       "antiguedadOtrasDias": 0
     },
     "resultadoCalculo": {
-      "tipoConcurso": "Concurso ordinario",
-      "puntuacionFinal": 8.7426,
-      "minimoExigido": 1.5,
+      "tipoConcurso": "Concurso específico",
+      "puntuacionFinal": 8.9549,
+      "minimoExigido": 4,
+      "superaFase1": true,
+      "superaFase2": true,
       "superaMinimo": true,
-      "apartados": {
-        "meritosEspecificos": {
-          "titulo": "a) Méritos específicos",
+      "fases": {
+        "fase1": {
+          "titulo": "Primera Fase (Méritos Generales)",
+          "tope": 7,
+          "minimoRequerido": 2.5,
+          "puntos": 6.7426,
+          "superada": true,
+          "apartados": {
+            "gradoPersonal": {
+              "titulo": "b) Grado personal reconocido",
+              "tope": 1,
+              "puntos": 0.8
+            },
+            "trabajoDesarrollado": {
+              "titulo": "c) Trabajo desarrollado",
+              "tope": 3,
+              "puntos": 3,
+              "puntosBrutos": 3.9076
+            },
+            "cursosFormacion": {
+              "titulo": "d) Cursos de formación y perfeccionamiento",
+              "tope": 2,
+              "puntos": 2,
+              "puntosBrutos": 2.67
+            },
+            "antiguedad": {
+              "titulo": "e) Antigüedad",
+              "tope": 1,
+              "puntos": 0.9426
+            }
+          }
+        },
+        "fase2": {
+          "titulo": "Segunda Fase (Méritos Específicos del Puesto)",
           "tope": 3,
-          "puntos": 3,
-          "desglose": {
-            "cursosEspecificos": 7,
-            "titulaciones": 0,
-            "idiomas": 0
+          "minimoRequerido": 1.5,
+          "puntos": 2.2123,
+          "superada": true,
+          "apartados": {
+            "formacionEspecifica": {
+              "titulo": "Formación específica, titulaciones e idiomas",
+              "tope": 1.5,
+              "puntos": 1.5,
+              "desglose": {
+                "cursos": 3.5,
+                "titulaciones": 0,
+                "idiomas": 0
+              }
+            },
+            "experienciaEspecifica": {
+              "titulo": "Experiencia específica en el ámbito competencial (mín. 6 meses)",
+              "tope": 1.5,
+              "diasComputados": 1300,
+              "puntos": 0.7123
+            }
           }
-        },
-        "gradoPersonal": {
-          "titulo": "b) Grado personal reconocido",
-          "tope": 1,
-          "puntos": 0.8,
-          "nivel": "16"
-        },
-        "trabajoDesarrollado": {
-          "titulo": "c) Trabajo desarrollado",
-          "tope": 2,
-          "puntos": 2,
-          "puntosBrutos": 2.9193
-        },
-        "cursosFormacion": {
-          "titulo": "d) Cursos de formación y perfeccionamiento",
-          "tope": 2,
-          "puntos": 2,
-          "puntosBrutos": 2.67
-        },
-        "antiguedad": {
-          "titulo": "e) Antigüedad",
-          "tope": 1,
-          "puntos": 0.9426,
-          "desglose": {
-            "vinculada": 0.9426,
-            "otras": 0
-          }
-        },
-        "conciliacion": {
-          "titulo": "f) Conciliación de la vida personal y laboral",
-          "tope": 1,
-          "puntos": 0,
-          "hijos": false,
-          "conyuge": false
         }
       },
       "cursosDetalle": [
@@ -1821,8 +1837,8 @@
           "esEspecifico": true,
           "incluido": true,
           "origenArchivo": "CURSOS DE FOMRACIÃN.docx",
-          "puntosBrutos": 7,
-          "factorPuntos": 0.02,
+          "puntosBrutos": 3.5,
+          "factorPuntos": 0.01,
           "esAprovechamiento": true
         },
         {
@@ -1859,8 +1875,8 @@
           "tipoPlaza": "vinculada",
           "esEspecificaAmbito": false,
           "origenArchivo": "TIEMPO TRABAJADO.docx",
-          "puntosBrutos": 1.1111,
-          "factor": 0.000304414
+          "puntosBrutos": 1.4286,
+          "factor": 0.000391389
         },
         {
           "puesto": "Auxiliar Administrativo/a",
@@ -1870,8 +1886,8 @@
           "tipoPlaza": "vinculada",
           "esEspecificaAmbito": false,
           "origenArchivo": "TIEMPO TRABAJADO.docx",
-          "puntosBrutos": 0.9333,
-          "factor": 0.000365297
+          "puntosBrutos": 1.1667,
+          "factor": 0.000456621
         },
         {
           "puesto": "Jefe/a de Negociado",
@@ -1881,8 +1897,8 @@
           "tipoPlaza": "vinculada",
           "esEspecificaAmbito": false,
           "origenArchivo": "TIEMPO TRABAJADO.docx",
-          "puntosBrutos": 0.4,
-          "factor": 0.000365297
+          "puntosBrutos": 0.6,
+          "factor": 0.000547945
         },
         {
           "puesto": "Gestor/a de Contenidos Digitales",
@@ -1892,8 +1908,8 @@
           "tipoPlaza": "vinculada",
           "esEspecificaAmbito": true,
           "origenArchivo": "TIEMPO TRABAJADO.docx",
-          "puntosBrutos": 0.4749,
-          "factor": 0.000365297
+          "puntosBrutos": 0.7123,
+          "factor": 0.000547945
         }
       ],
       "resumenCursos": {
@@ -1903,7 +1919,7 @@
           "horasAsistencia": 0,
           "horasAprovechamiento": 350,
           "horasTotales": 350,
-          "puntosBrutos": 7
+          "puntosBrutos": 3.5
         },
         "generales": {
           "totalCursos": 2,
@@ -1915,6 +1931,493 @@
         }
       }
     },
-    "updatedAt": "2026-10-10T19:18:07.672Z"
+    "updatedAt": "2026-10-11T17:08:46.050Z"
+  },
+  {
+    "id": "1111111",
+    "nombre": "Cazamayor",
+    "dni": "1111111",
+    "puestosSolicitados": [
+      {
+        "id": "FC1897",
+        "codigoRpt": "FC1897",
+        "tipo": "Gestor/a de Contenidos Digitales",
+        "formaProvision": "Concurso específico",
+        "cd": 18,
+        "ce": 32,
+        "dotaciones": 1,
+        "consejeria": "CONSEJERÍA INSULAR DE PRESIDENCIA, ADMINISTRACIÓN Y SERVICIO",
+        "entidad": "Cabildo de Tenerife",
+        "servicio": "Servicio Administrativo de Atención Ciudadana y Calidad de los Servicios",
+        "unidad": "Canales Digitales",
+        "localizacion": "Zona metropolitana Santa Cruz de Tenerife- La Laguna",
+        "requisitoExperiencia": "12 meses en Cabildo en nivel 16/18, o 30 meses en AAPP (mínimo 12 en Cabildo)",
+        "minimoSuperar": 4,
+        "minimoFase1": 2.5,
+        "minimoFase2": 1.5,
+        "esPuestoUnico": true,
+        "descripcion": "Servicio Administrativo de Atención Ciudadana y Calidad de los Servicios (Canales Digitales) [Zona metropolitana Santa Cruz de Tenerife- La Laguna]",
+        "denominacionLarga": "[FC1897] Gestor/a de Contenidos Digitales - Servicio Administrativo de Atención Ciudadana y Calidad de los Servicios (Canales Digitales) - Zona metropolitana Santa Cruz de Tenerife- La Laguna",
+        "orden": 1
+      },
+      {
+        "id": "FC1843",
+        "codigoRpt": "FC1843",
+        "tipo": "Auxiliar Administrativo/a",
+        "formaProvision": "Concurso ordinario",
+        "cd": 16,
+        "ce": 28,
+        "dotaciones": 1,
+        "consejeria": "Cabildo Insular de Tenerife",
+        "entidad": "Cabildo de Tenerife",
+        "servicio": "Servicio Administrativo de Proyectos Estratégicos",
+        "unidad": "Administrativa de Proyectos Estratégicos",
+        "localizacion": "Zona metropolitana Santa Cruz de Tenerife- La Laguna",
+        "requisitoExperiencia": "18 meses en la Subescala Administrativa de Administración General",
+        "minimoSuperar": 1.5,
+        "esPuestoUnico": false,
+        "descripcion": "Servicio Administrativo de Proyectos Estratégicos (Administrativa de Proyectos Estratégicos) [Zona metropolitana Santa Cruz de Tenerife- La Laguna]",
+        "denominacionLarga": "[FC1843] Auxiliar Administrativo/a - Servicio Administrativo de Proyectos Estratégicos (Administrativa de Proyectos Estratégicos) - Zona metropolitana Santa Cruz de Tenerife- La Laguna",
+        "orden": 2
+      },
+      {
+        "id": "FC1069",
+        "codigoRpt": "FC1069",
+        "tipo": "Gestor/a de Servicios",
+        "formaProvision": "Concurso específico",
+        "cd": 18,
+        "ce": 32,
+        "dotaciones": 1,
+        "consejeria": "CONSEJERÍA INSULAR DE PRESIDENCIA, ADMINISTRACIÓN Y SERVICIO",
+        "entidad": "Cabildo de Tenerife",
+        "servicio": "Servicio Administrativo de Atención Ciudadana y Calidad de los Servicios",
+        "unidad": "Atención Ciudadana",
+        "localizacion": "Zona Sur: Arona",
+        "requisitoExperiencia": "12 meses en Cabildo en nivel 16/18, o 30 meses en AAPP (mínimo 12 en Cabildo)",
+        "minimoSuperar": 4,
+        "minimoFase1": 2.5,
+        "minimoFase2": 1.5,
+        "esPuestoUnico": false,
+        "descripcion": "Servicio Administrativo de Atención Ciudadana y Calidad de los Servicios (Atención Ciudadana) [Zona Sur: Arona]",
+        "denominacionLarga": "[FC1069] Gestor/a de Servicios - Servicio Administrativo de Atención Ciudadana y Calidad de los Servicios (Atención Ciudadana) - Zona Sur: Arona",
+        "orden": 3
+      },
+      {
+        "id": "FC1810",
+        "codigoRpt": "FC1810",
+        "tipo": "Jefe/a de Negociado",
+        "formaProvision": "Concurso específico",
+        "cd": 18,
+        "ce": 32,
+        "dotaciones": 1,
+        "consejeria": "CONSEJERÍA INSULAR DE PRESIDENCIA, ADMINISTRACIÓN Y SERVICIO",
+        "entidad": "Cabildo de Tenerife",
+        "servicio": "Servicio Técnico de Arquitectura y Patrimonio",
+        "unidad": "Apoyo Técnico Especializado",
+        "localizacion": "Zona metropolitana Santa Cruz de Tenerife- La Laguna",
+        "requisitoExperiencia": "12 meses en Cabildo en nivel 16/18, o 30 meses en AAPP (mínimo 12 en Cabildo)",
+        "minimoSuperar": 4,
+        "minimoFase1": 2.5,
+        "minimoFase2": 1.5,
+        "esPuestoUnico": false,
+        "descripcion": "Servicio Técnico de Arquitectura y Patrimonio (Apoyo Técnico Especializado) [Zona metropolitana Santa Cruz de Tenerife- La Laguna]",
+        "denominacionLarga": "[FC1810] Jefe/a de Negociado - Servicio Técnico de Arquitectura y Patrimonio (Apoyo Técnico Especializado) - Zona metropolitana Santa Cruz de Tenerife- La Laguna",
+        "orden": 4
+      }
+    ],
+    "puestoSolicitado": {
+      "id": "FC1897",
+      "codigoRpt": "FC1897",
+      "tipo": "Gestor/a de Contenidos Digitales",
+      "formaProvision": "Concurso específico",
+      "cd": 18,
+      "ce": 32,
+      "dotaciones": 1,
+      "consejeria": "CONSEJERÍA INSULAR DE PRESIDENCIA, ADMINISTRACIÓN Y SERVICIO",
+      "entidad": "Cabildo de Tenerife",
+      "servicio": "Servicio Administrativo de Atención Ciudadana y Calidad de los Servicios",
+      "unidad": "Canales Digitales",
+      "localizacion": "Zona metropolitana Santa Cruz de Tenerife- La Laguna",
+      "requisitoExperiencia": "12 meses en Cabildo en nivel 16/18, o 30 meses en AAPP (mínimo 12 en Cabildo)",
+      "minimoSuperar": 4,
+      "minimoFase1": 2.5,
+      "minimoFase2": 1.5,
+      "esPuestoUnico": true,
+      "descripcion": "Servicio Administrativo de Atención Ciudadana y Calidad de los Servicios (Canales Digitales) [Zona metropolitana Santa Cruz de Tenerife- La Laguna]",
+      "denominacionLarga": "[FC1897] Gestor/a de Contenidos Digitales - Servicio Administrativo de Atención Ciudadana y Calidad de los Servicios (Canales Digitales) - Zona metropolitana Santa Cruz de Tenerife- La Laguna"
+    },
+    "situacionAdministrativa": "definitiva",
+    "puestoOrigen": "",
+    "participaResultas": true,
+    "soloResultas": false,
+    "renunciaResultas": false,
+    "gradoPersonal": "16",
+    "conciliacionHijos": false,
+    "conciliacionConyuge": false,
+    "antiguedadVinculadaDias": 8400,
+    "antiguedadOtrasDias": 0,
+    "merits": {
+      "cursos": [
+        {
+          "titulo": "Cursos de Formación Específica",
+          "horas": 350,
+          "tipo": "Aprovechamiento",
+          "caracter": "Específico",
+          "esEspecifico": true,
+          "incluido": true,
+          "origenArchivo": "CURSOS DE FOMRACIÃN.docx",
+          "puntosBrutos": 3.5,
+          "factorPuntos": 0.01
+        },
+        {
+          "titulo": "Cursos de Formación Transversal / General",
+          "horas": 150,
+          "tipo": "Aprovechamiento",
+          "caracter": "General / Transversal",
+          "esEspecifico": false,
+          "incluido": true,
+          "origenArchivo": "CURSOS DE FOMRACIÃN.docx",
+          "puntosBrutos": 1.005,
+          "factorPuntos": 0.0067
+        },
+        {
+          "titulo": "CURSOS ORDIANRIOS",
+          "horas": 300,
+          "tipo": "Asistencia",
+          "caracter": "General / Transversal",
+          "esEspecifico": false,
+          "incluido": true,
+          "origenArchivo": "CURSOS DE FOMRACIÃN.docx",
+          "puntosBrutos": 1.5,
+          "factorPuntos": 0.005
+        }
+      ],
+      "experiencia": [
+        {
+          "puesto": "Auxiliar Administrativo/a Adscrito/a",
+          "administracion": "Cabildo Insular de Tenerife",
+          "cd": 14,
+          "dias": 3650,
+          "tipoPlaza": "vinculada",
+          "esEspecificaAmbito": false,
+          "origenArchivo": "TIEMPO TRABAJADO.docx",
+          "puntosBrutos": 1.4286,
+          "factor": 0.000391389
+        },
+        {
+          "puesto": "Auxiliar Administrativo/a",
+          "administracion": "Cabildo Insular de Tenerife",
+          "cd": 16,
+          "dias": 2555,
+          "tipoPlaza": "vinculada",
+          "esEspecificaAmbito": false,
+          "origenArchivo": "TIEMPO TRABAJADO.docx",
+          "puntosBrutos": 1.1667,
+          "factor": 0.000456621
+        },
+        {
+          "puesto": "Jefe/a de Negociado",
+          "administracion": "Cabildo Insular de Tenerife",
+          "cd": 18,
+          "dias": 1095,
+          "tipoPlaza": "vinculada",
+          "esEspecificaAmbito": false,
+          "origenArchivo": "TIEMPO TRABAJADO.docx",
+          "puntosBrutos": 0.6,
+          "factor": 0.000547945
+        },
+        {
+          "puesto": "Gestor/a de Contenidos Digitales",
+          "administracion": "Cabildo Insular de Tenerife",
+          "cd": 18,
+          "dias": 1100,
+          "tipoPlaza": "vinculada",
+          "esEspecificaAmbito": true,
+          "origenArchivo": "TIEMPO TRABAJADO.docx",
+          "puntosBrutos": 0.6027,
+          "factor": 0.000547945
+        }
+      ],
+      "titulaciones": [],
+      "idiomas": [],
+      "archivosProcesados": [
+        {
+          "success": true,
+          "archivo": "TIEMPO TRABAJADO.docx",
+          "size": 13392,
+          "tipoDocumentoEstimado": "Servicios prestados (4)",
+          "datosCandidato": {},
+          "cursos": [],
+          "experiencia": [
+            {
+              "puesto": "Auxiliar Administrativo/a Adscrito/a",
+              "administracion": "Cabildo Insular de Tenerife",
+              "cd": 14,
+              "dias": 3650,
+              "tipoPlaza": "vinculada",
+              "esEspecificaAmbito": false,
+              "origenArchivo": "TIEMPO TRABAJADO.docx",
+              "puntosBrutos": 1.4286,
+              "factor": 0.000391389
+            },
+            {
+              "puesto": "Auxiliar Administrativo/a",
+              "administracion": "Cabildo Insular de Tenerife",
+              "cd": 16,
+              "dias": 2555,
+              "tipoPlaza": "vinculada",
+              "esEspecificaAmbito": false,
+              "origenArchivo": "TIEMPO TRABAJADO.docx",
+              "puntosBrutos": 1.1667,
+              "factor": 0.000456621
+            },
+            {
+              "puesto": "Jefe/a de Negociado",
+              "administracion": "Cabildo Insular de Tenerife",
+              "cd": 18,
+              "dias": 1095,
+              "tipoPlaza": "vinculada",
+              "esEspecificaAmbito": false,
+              "origenArchivo": "TIEMPO TRABAJADO.docx",
+              "puntosBrutos": 0.6,
+              "factor": 0.000547945
+            },
+            {
+              "puesto": "Gestor/a de Contenidos Digitales",
+              "administracion": "Cabildo Insular de Tenerife",
+              "cd": 18,
+              "dias": 1100,
+              "tipoPlaza": "vinculada",
+              "esEspecificaAmbito": true,
+              "origenArchivo": "TIEMPO TRABAJADO.docx",
+              "puntosBrutos": 0.6027,
+              "factor": 0.000547945
+            }
+          ],
+          "titulaciones": [],
+          "idiomas": [],
+          "gradoDetectado": null,
+          "textoExtraidoPreview": "TIEMPO TRABAJADO\n\nEn aCAbildo de tenerife\n\nNivel 14 10 años\n\nNivel 16 7 años\n\nNivel 18 3 años como Jefe de negociado\n\nNivel 18 como gestor de contenidos: 3 años\n\n"
+        },
+        {
+          "success": true,
+          "archivo": "CURSOS DE FOMRACIÃN.docx",
+          "size": 13306,
+          "tipoDocumentoEstimado": "Cursos de formación (3)",
+          "datosCandidato": {},
+          "cursos": [
+            {
+              "titulo": "Cursos de Formación Específica",
+              "horas": 350,
+              "tipo": "Aprovechamiento",
+              "caracter": "Específico",
+              "esEspecifico": true,
+              "incluido": true,
+              "origenArchivo": "CURSOS DE FOMRACIÃN.docx",
+              "puntosBrutos": 3.5,
+              "factorPuntos": 0.01
+            },
+            {
+              "titulo": "Cursos de Formación Transversal / General",
+              "horas": 150,
+              "tipo": "Aprovechamiento",
+              "caracter": "General / Transversal",
+              "esEspecifico": false,
+              "incluido": true,
+              "origenArchivo": "CURSOS DE FOMRACIÃN.docx",
+              "puntosBrutos": 1.005,
+              "factorPuntos": 0.0067
+            },
+            {
+              "titulo": "CURSOS ORDIANRIOS",
+              "horas": 300,
+              "tipo": "Asistencia",
+              "caracter": "General / Transversal",
+              "esEspecifico": false,
+              "incluido": true,
+              "origenArchivo": "CURSOS DE FOMRACIÃN.docx",
+              "puntosBrutos": 1.5,
+              "factorPuntos": 0.005
+            }
+          ],
+          "experiencia": [],
+          "titulaciones": [],
+          "idiomas": [],
+          "gradoDetectado": null,
+          "textoExtraidoPreview": "CURSOS DE FOMRACIÓN\n\n\n\nESPECÍFICA CON APROVECHAMIENTO 350 HORAS\n\nTRANSVERSAL APROVECHAMIENTO 150 HORAS\n\nCURSOS ORDIANRIOS 300 HORAS\n\n"
+        }
+      ],
+      "antiguedadVinculadaDias": 8400,
+      "antiguedadOtrasDias": 0
+    },
+    "resultadoCalculo": {
+      "tipoConcurso": "Concurso específico",
+      "puntuacionFinal": 8.8233,
+      "minimoExigido": 4,
+      "superaFase1": true,
+      "superaFase2": true,
+      "superaMinimo": true,
+      "fases": {
+        "fase1": {
+          "titulo": "Primera Fase (Méritos Generales)",
+          "tope": 7,
+          "minimoRequerido": 2.5,
+          "puntos": 6.7206,
+          "superada": true,
+          "apartados": {
+            "gradoPersonal": {
+              "titulo": "b) Grado personal reconocido",
+              "tope": 1,
+              "puntos": 0.8
+            },
+            "trabajoDesarrollado": {
+              "titulo": "c) Trabajo desarrollado",
+              "tope": 3,
+              "puntos": 3,
+              "puntosBrutos": 3.798
+            },
+            "cursosFormacion": {
+              "titulo": "d) Cursos de formación y perfeccionamiento",
+              "tope": 2,
+              "puntos": 2,
+              "puntosBrutos": 2.505
+            },
+            "antiguedad": {
+              "titulo": "e) Antigüedad",
+              "tope": 1,
+              "puntos": 0.9206
+            }
+          }
+        },
+        "fase2": {
+          "titulo": "Segunda Fase (Méritos Específicos del Puesto)",
+          "tope": 3,
+          "minimoRequerido": 1.5,
+          "puntos": 2.1027,
+          "superada": true,
+          "apartados": {
+            "formacionEspecifica": {
+              "titulo": "Formación específica, titulaciones e idiomas",
+              "tope": 1.5,
+              "puntos": 1.5,
+              "desglose": {
+                "cursos": 3.5,
+                "titulaciones": 0,
+                "idiomas": 0
+              }
+            },
+            "experienciaEspecifica": {
+              "titulo": "Experiencia específica en el ámbito competencial (mín. 6 meses)",
+              "tope": 1.5,
+              "diasComputados": 1100,
+              "puntos": 0.6027
+            }
+          }
+        }
+      },
+      "cursosDetalle": [
+        {
+          "titulo": "Cursos de Formación Específica",
+          "horas": 350,
+          "tipo": "Aprovechamiento",
+          "caracter": "Específico",
+          "esEspecifico": true,
+          "incluido": true,
+          "origenArchivo": "CURSOS DE FOMRACIÃN.docx",
+          "puntosBrutos": 3.5,
+          "factorPuntos": 0.01,
+          "esAprovechamiento": true
+        },
+        {
+          "titulo": "Cursos de Formación Transversal / General",
+          "horas": 150,
+          "tipo": "Aprovechamiento",
+          "caracter": "General / Transversal",
+          "esEspecifico": false,
+          "incluido": true,
+          "origenArchivo": "CURSOS DE FOMRACIÃN.docx",
+          "puntosBrutos": 1.005,
+          "factorPuntos": 0.0067,
+          "esAprovechamiento": true
+        },
+        {
+          "titulo": "CURSOS ORDIANRIOS",
+          "horas": 300,
+          "tipo": "Asistencia",
+          "caracter": "General / Transversal",
+          "esEspecifico": false,
+          "incluido": true,
+          "origenArchivo": "CURSOS DE FOMRACIÃN.docx",
+          "puntosBrutos": 1.5,
+          "factorPuntos": 0.005,
+          "esAprovechamiento": false
+        }
+      ],
+      "experienciaDetalle": [
+        {
+          "puesto": "Auxiliar Administrativo/a Adscrito/a",
+          "administracion": "Cabildo Insular de Tenerife",
+          "cd": 14,
+          "dias": 3650,
+          "tipoPlaza": "vinculada",
+          "esEspecificaAmbito": false,
+          "origenArchivo": "TIEMPO TRABAJADO.docx",
+          "puntosBrutos": 1.4286,
+          "factor": 0.000391389
+        },
+        {
+          "puesto": "Auxiliar Administrativo/a",
+          "administracion": "Cabildo Insular de Tenerife",
+          "cd": 16,
+          "dias": 2555,
+          "tipoPlaza": "vinculada",
+          "esEspecificaAmbito": false,
+          "origenArchivo": "TIEMPO TRABAJADO.docx",
+          "puntosBrutos": 1.1667,
+          "factor": 0.000456621
+        },
+        {
+          "puesto": "Jefe/a de Negociado",
+          "administracion": "Cabildo Insular de Tenerife",
+          "cd": 18,
+          "dias": 1095,
+          "tipoPlaza": "vinculada",
+          "esEspecificaAmbito": false,
+          "origenArchivo": "TIEMPO TRABAJADO.docx",
+          "puntosBrutos": 0.6,
+          "factor": 0.000547945
+        },
+        {
+          "puesto": "Gestor/a de Contenidos Digitales",
+          "administracion": "Cabildo Insular de Tenerife",
+          "cd": 18,
+          "dias": 1100,
+          "tipoPlaza": "vinculada",
+          "esEspecificaAmbito": true,
+          "origenArchivo": "TIEMPO TRABAJADO.docx",
+          "puntosBrutos": 0.6027,
+          "factor": 0.000547945
+        }
+      ],
+      "resumenCursos": {
+        "especificos": {
+          "totalCursos": 1,
+          "cursosIncluidos": 1,
+          "horasAsistencia": 0,
+          "horasAprovechamiento": 350,
+          "horasTotales": 350,
+          "puntosBrutos": 3.5
+        },
+        "generales": {
+          "totalCursos": 2,
+          "cursosIncluidos": 2,
+          "horasAsistencia": 300,
+          "horasAprovechamiento": 150,
+          "horasTotales": 450,
+          "puntosBrutos": 2.505
+        }
+      }
+    },
+    "updatedAt": "2026-10-11T17:09:17.079Z"
   }
 ]
