@@ -2898,20 +2898,23 @@ function agregarIdiomaPrompt() {
 }
 
 function cerrarModales() {
-  const mCurso = document.getElementById('modalCurso');
-  const mExp = document.getElementById('modalExp');
-  const mTexto = document.getElementById('modalTexto');
-  const mPuesto = document.getElementById('modalNuevoPuesto');
+  document.querySelectorAll('.modal').forEach(m => {
+    m.style.display = 'none';
+  });
   const mActa = document.getElementById('modalConfigActa');
-  const mComp = document.getElementById('modalComparadorDesempate');
-  const mSim = document.getElementById('modalSimuladorAlegaciones');
-  if (mCurso) mCurso.style.display = 'none';
-  if (mExp) mExp.style.display = 'none';
-  if (mTexto) mTexto.style.display = 'none';
-  if (mPuesto) mPuesto.style.display = 'none';
   if (mActa) mActa.style.display = 'none';
+  const mComp = document.getElementById('modalComparadorDesempate');
   if (mComp) mComp.style.display = 'none';
+  const mSim = document.getElementById('modalSimuladorAlegaciones');
   if (mSim) mSim.style.display = 'none';
+  const mTribunal = document.getElementById('modoTribunalOverlay');
+  if (mTribunal) mTribunal.style.display = 'none';
+}
+
+function cerrarModalActa() {
+  const mActa = document.getElementById('modalConfigActa');
+  if (mActa) mActa.style.display = 'none';
+  cerrarModales();
 }
 
 function abrirModalNuevoPuesto(plazaPrevia = null) {

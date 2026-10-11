@@ -1254,7 +1254,7 @@
         <h3 id="modalConfigActaTitulo" style="color:#ffffff; margin:0; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
           <span>🏛️</span> Configuración del Acta Oficial del Tribunal
         </h3>
-        <button class="close-btn" onclick="cerrarModales()" style="color:#ffffff;">&times;</button>
+        <button class="close-btn" onclick="document.getElementById('modalConfigActa').style.display='none'; cerrarModales();" style="color:#ffffff; cursor:pointer;" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <p class="help-text mb-2" style="font-size:0.8rem;">
@@ -1308,7 +1308,7 @@
         </div>
       </div>
       <div class="modal-footer" style="background:#f1f5f9; display:flex; justify-content:space-between; align-items:center;">
-        <button type="button" class="btn btn-outline" onclick="cerrarModales()">Cancelar</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('modalConfigActa').style.display='none'; cerrarModales();">Cancelar</button>
         <button type="button" id="btnDescargarActaWordFinal" class="btn btn-primary" onclick="ejecutarDescargaActaWord()" style="background:#1e3a8a; border-color:#1e3a8a; font-weight:700; display:flex; align-items:center; gap:6px;">
           📥 Descargar Acta Oficial en Word (.doc)
         </button>
@@ -1323,7 +1323,7 @@
         <h3 style="color:#ffffff; margin:0; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
           <span>⚖️</span> Comparador Oficial de Desempates (Base Novena)
         </h3>
-        <button class="close-btn" onclick="cerrarModales()" style="color:#ffffff;">&times;</button>
+        <button class="close-btn" onclick="document.getElementById('modalComparadorDesempate').style.display='none'; cerrarModales();" style="color:#ffffff; cursor:pointer;" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <p class="help-text mb-2" style="font-size:0.8rem; color:#475569;">
@@ -1373,7 +1373,7 @@
         </div>
       </div>
       <div class="modal-footer" style="background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
-        <button type="button" class="btn btn-outline" onclick="cerrarModales()">Cerrar</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('modalComparadorDesempate').style.display='none'; cerrarModales();">Cerrar</button>
         <button type="button" class="btn btn-primary" onclick="copiarDictamenDesempate()" style="background:#0284c7; border-color:#0284c7;">
           📋 Copiar Dictamen para Acta
         </button>
@@ -1388,7 +1388,7 @@
         <h3 style="color:#ffffff; margin:0; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
           <span>🧪</span> Simulador de Alegaciones y Cascada de Resultas (What-if)
         </h3>
-        <button class="close-btn" onclick="cerrarModales()" style="color:#ffffff;">&times;</button>
+        <button class="close-btn" onclick="document.getElementById('modalSimuladorAlegaciones').style.display='none'; cerrarModales();" style="color:#ffffff; cursor:pointer;" title="Cerrar">&times;</button>
       </div>
       <div class="modal-body">
         <div style="background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; padding:8px 12px; border-radius:6px; font-size:0.8rem; margin-bottom:12px;">
@@ -1469,7 +1469,7 @@
         </div>
       </div>
       <div class="modal-footer" style="background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
-        <button type="button" class="btn btn-outline" onclick="cerrarModales()">Cerrar</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('modalSimuladorAlegaciones').style.display='none'; cerrarModales();">Cerrar</button>
         <button type="button" id="btnConsolidarSimulacion" class="btn btn-primary" onclick="consolidarAlegacionSimulada()" style="display:none; background:#15803d; border-color:#15803d; font-weight:700;">
           💾 Consolidar y Guardar Cambios en Concurso
         </button>
