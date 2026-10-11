@@ -853,6 +853,7 @@ function seleccionarPuesto(index) {
 function sincronizarAntiguedadAutomatica() {
   const chk = document.getElementById('chkAutoAntiguedad');
   if (!chk || !chk.checked) return;
+  if (!meritoActual || !Array.isArray(meritoActual.experiencia)) return;
 
   let totalVinculada = 0;
   let totalOtras = 0;
@@ -866,8 +867,10 @@ function sincronizarAntiguedadAutomatica() {
     }
   });
 
-  document.getElementById('inputAntigVinculada').value = totalVinculada;
-  document.getElementById('inputAntigOtras').value = totalOtras;
+  const inVin = document.getElementById('inputAntigVinculada');
+  const inOtr = document.getElementById('inputAntigOtras');
+  if (inVin) inVin.value = totalVinculada;
+  if (inOtr) inOtr.value = totalOtras;
 
   const bVin = document.getElementById('badgeAutoVinculada');
   const bOtr = document.getElementById('badgeAutoOtras');
@@ -1375,112 +1378,132 @@ async function procesarArchivos(files) {
 
 // Actualizar listas y tablas en la interfaz
 function actualizarVistas() {
+  if (!meritoActual) {
+    meritoActual = { cursos: [], experiencia: [], titulaciones: [], idiomas: [], archivosProcesados: [] };
+  }
+  if (!Array.isArray(meritoActual.cursos)) meritoActual.cursos = [];
+  if (!Array.isArray(meritoActual.experiencia)) meritoActual.experiencia = [];
+  if (!Array.isArray(meritoActual.titulaciones)) meritoActual.titulaciones = [];
+  if (!Array.isArray(meritoActual.idiomas)) meritoActual.idiomas = [];
+  if (!Array.isArray(meritoActual.archivosProcesados)) meritoActual.archivosProcesados = [];
+
   const listaArchivos = document.getElementById('listaArchivos');
-  listaArchivos.innerHTML = '';
-  meritoActual.archivosProcesados.forEach((item, index) => {
-    const div = document.createElement('div');
-    div.className = 'file-item';
-    div.innerHTML = `
-      <div class="file-name">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        ${item.archivo}
-      </div>
-      <div>
-        <span class="file-tag">${item.tipoDocumentoEstimado || 'Procesado'}</span>
-        <button class="btn btn-sm btn-outline" onclick="verTextoExtraido(${index})" style="padding:1px 6px; font-size:0.7rem; margin-right:4px;">Ver Texto</button>
-        <button class="btn-icon-danger" onclick="eliminarArchivo(${index})" title="Eliminar archivo">&times;</button>
-      </div>
-    `;
-    listaArchivos.appendChild(div);
-  });
+  if (listaArchivos) {
+    listaArchivos.innerHTML = '';
+    meritoActual.archivosProcesados.forEach((item, index) => {
+      const div = document.createElement('div');
+      div.className = 'file-item';
+      div.innerHTML = `
+        <div class="file-name">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          ${item.archivo}
+        </div>
+        <div>
+          <span class="file-tag">${item.tipoDocumentoEstimado || 'Procesado'}</span>
+          <button class="btn btn-sm btn-outline" onclick="verTextoExtraido(${index})" style="padding:1px 6px; font-size:0.7rem; margin-right:4px;">Ver Texto</button>
+          <button class="btn-icon-danger" onclick="eliminarArchivo(${index})" title="Eliminar archivo">&times;</button>
+        </div>
+      `;
+      listaArchivos.appendChild(div);
+    });
+  }
 
   // Contadores
-  document.getElementById('countCursos').textContent = meritoActual.cursos.length;
-  document.getElementById('countExp').textContent = meritoActual.experiencia.length;
-  document.getElementById('countOtros').textContent = meritoActual.titulaciones.length + meritoActual.idiomas.length;
+  const elCountCursos = document.getElementById('countCursos');
+  if (elCountCursos) elCountCursos.textContent = meritoActual.cursos.length;
+  const elCountExp = document.getElementById('countExp');
+  if (elCountExp) elCountExp.textContent = meritoActual.experiencia.length;
+  const elCountOtros = document.getElementById('countOtros');
+  if (elCountOtros) elCountOtros.textContent = meritoActual.titulaciones.length + meritoActual.idiomas.length;
 
   // Tabla Cursos (Separada en Bloque Específico y Bloque General)
   renderizarTablasCursos();
 
   // Tabla Experiencia
   const tbodyExp = document.getElementById('tbodyExp');
-  if (meritoActual.experiencia.length === 0) {
-    tbodyExp.innerHTML = `<tr><td colspan="7" class="text-center empty-state">No hay períodos de experiencia. Sube certificados o pulsa "+ Añadir Período".</td></tr>`;
-  } else {
-    tbodyExp.innerHTML = '';
-    meritoActual.experiencia.forEach((exp, idx) => {
-      const tr = document.createElement('tr');
-      const ptsVal = exp.puntosBrutos !== undefined ? exp.puntosBrutos.toFixed(4) : '...';
-      const esVinculada = (exp.tipoPlaza !== 'otra');
+  if (tbodyExp) {
+    if (!Array.isArray(meritoActual.experiencia) || meritoActual.experiencia.length === 0) {
+      tbodyExp.innerHTML = `<tr><td colspan="7" class="text-center empty-state">No hay períodos de experiencia. Sube certificados o pulsa "+ Añadir Período".</td></tr>`;
+    } else {
+      tbodyExp.innerHTML = '';
+      meritoActual.experiencia.forEach((exp, idx) => {
+        const tr = document.createElement('tr');
+        const ptsVal = exp.puntosBrutos !== undefined ? exp.puntosBrutos.toFixed(4) : '...';
+        const esVinculada = (exp.tipoPlaza !== 'otra');
 
-      tr.innerHTML = `
-        <td>
-          <input type="text" value="${exp.puesto || 'Auxiliar Administrativo/a'}" 
-            onchange="cambiarPuestoExp(${idx}, this.value)" 
-            class="form-control" 
-            style="padding: 2px 6px; font-size: 0.8rem; font-weight:600; min-width: 150px;">
-          <small class="help-text" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:2px;">
-            <select onchange="cambiarTipoPlazaExp(${idx}, this.value)" style="border:none; background:#f1f5f9; padding:1px 4px; border-radius:3px; font-size:0.7rem;">
-              <option value="vinculada" ${esVinculada ? 'selected' : ''}>Plaza vinculada (Auxiliar)</option>
-              <option value="otra" ${!esVinculada ? 'selected' : ''}>Otra plaza de AAPP</option>
-            </select>
-            ${exp.fechaInicio && exp.fechaFin ? `<span style="font-size:0.68rem; color:#64748b;">📅 ${exp.fechaInicio} al ${exp.fechaFin}</span>` : ''}
-          </small>
-        </td>
-        <td>${exp.administracion}</td>
-        <td><span class="badge badge-neutral">Nivel ${exp.cd}</span></td>
-        <td>
-          <div style="display:flex; align-items:center; gap:3px;">
-            <input type="number" value="${exp.dias}" min="1" 
-              onchange="cambiarDiasExp(${idx}, this.value)" 
+        tr.innerHTML = `
+          <td>
+            <input type="text" value="${exp.puesto || 'Auxiliar Administrativo/a'}" 
+              onchange="cambiarPuestoExp(${idx}, this.value)" 
               class="form-control" 
-              style="width: 75px; padding: 2px 6px; font-size: 0.8rem; font-weight:600; text-align:right;">
-            <span style="font-size:0.75rem; color:#64748b;">días</span>
-          </div>
-        </td>
-        <td>
-          <label style="display:flex; align-items:center; gap:4px; font-size:0.775rem; cursor:pointer;">
-            <input type="checkbox" ${exp.esEspecificaAmbito ? 'checked' : ''} onchange="toggleExpAmbito(${idx}, this.checked)">
-            <span>En ámbito Servicio</span>
-          </label>
-        </td>
-        <td><span class="badge badge-info badge-puntos-exp" id="badgePtsExp_${idx}">${ptsVal} pts</span></td>
-        <td>
-          <div style="display:flex; gap:4px;">
-            <button class="btn-icon-edit" onclick="abrirModalEditarExp(${idx})" title="Editar período">✏️</button>
-            <button class="btn-icon-danger" onclick="eliminarExp(${idx})" title="Eliminar">&times;</button>
-          </div>
-        </td>
-      `;
-      tbodyExp.appendChild(tr);
-    });
+              style="padding: 2px 6px; font-size: 0.8rem; font-weight:600; min-width: 150px;">
+            <small class="help-text" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:2px;">
+              <select onchange="cambiarTipoPlazaExp(${idx}, this.value)" style="border:none; background:#f1f5f9; padding:1px 4px; border-radius:3px; font-size:0.7rem;">
+                <option value="vinculada" ${esVinculada ? 'selected' : ''}>Plaza vinculada (Auxiliar)</option>
+                <option value="otra" ${!esVinculada ? 'selected' : ''}>Otra plaza de AAPP</option>
+              </select>
+              ${exp.fechaInicio && exp.fechaFin ? `<span style="font-size:0.68rem; color:#64748b;">📅 ${exp.fechaInicio} al ${exp.fechaFin}</span>` : ''}
+            </small>
+          </td>
+          <td>${exp.administracion}</td>
+          <td><span class="badge badge-neutral">Nivel ${exp.cd}</span></td>
+          <td>
+            <div style="display:flex; align-items:center; gap:3px;">
+              <input type="number" value="${exp.dias}" min="1" 
+                onchange="cambiarDiasExp(${idx}, this.value)" 
+                class="form-control" 
+                style="width: 75px; padding: 2px 6px; font-size: 0.8rem; font-weight:600; text-align:right;">
+              <span style="font-size:0.75rem; color:#64748b;">días</span>
+            </div>
+          </td>
+          <td>
+            <label style="display:flex; align-items:center; gap:4px; font-size:0.775rem; cursor:pointer;">
+              <input type="checkbox" ${exp.esEspecificaAmbito ? 'checked' : ''} onchange="toggleExpAmbito(${idx}, this.checked)">
+              <span>En ámbito Servicio</span>
+            </label>
+          </td>
+          <td><span class="badge badge-info badge-puntos-exp" id="badgePtsExp_${idx}">${ptsVal} pts</span></td>
+          <td>
+            <div style="display:flex; gap:4px;">
+              <button class="btn-icon-edit" onclick="abrirModalEditarExp(${idx})" title="Editar período">✏️</button>
+              <button class="btn-icon-danger" onclick="eliminarExp(${idx})" title="Eliminar">&times;</button>
+            </div>
+          </td>
+        `;
+        tbodyExp.appendChild(tr);
+      });
+    }
   }
 
   // Titulaciones
   const listaTit = document.getElementById('listaTitulaciones');
-  listaTit.innerHTML = '';
-  meritoActual.titulaciones.forEach((tit, idx) => {
-    const div = document.createElement('div');
-    div.className = 'merit-pill';
-    div.innerHTML = `
-      <span>🎓 <strong>${tit.tipo}</strong>: ${tit.denominacion || ''}</span>
-      <button class="btn-icon-danger" onclick="eliminarTitulacion(${idx})">&times;</button>
-    `;
-    listaTit.appendChild(div);
-  });
+  if (listaTit) {
+    listaTit.innerHTML = '';
+    (meritoActual.titulaciones || []).forEach((tit, idx) => {
+      const div = document.createElement('div');
+      div.className = 'merit-pill';
+      div.innerHTML = `
+        <span>🎓 <strong>${tit.tipo}</strong>: ${tit.denominacion || ''}</span>
+        <button class="btn-icon-danger" onclick="eliminarTitulacion(${idx})">&times;</button>
+      `;
+      listaTit.appendChild(div);
+    });
+  }
 
   // Idiomas
   const listaId = document.getElementById('listaIdiomas');
-  listaId.innerHTML = '';
-  meritoActual.idiomas.forEach((idm, idx) => {
-    const div = document.createElement('div');
-    div.className = 'merit-pill';
-    div.innerHTML = `
-      <span>🗣️ <strong>${idm.idioma}</strong> - Nivel MCER: <strong>${idm.nivel}</strong></span>
-      <button class="btn-icon-danger" onclick="eliminarIdioma(${idx})">&times;</button>
-    `;
-    listaId.appendChild(div);
-  });
+  if (listaId) {
+    listaId.innerHTML = '';
+    (meritoActual.idiomas || []).forEach((idm, idx) => {
+      const div = document.createElement('div');
+      div.className = 'merit-pill';
+      div.innerHTML = `
+        <span>🗣️ <strong>${idm.idioma}</strong> - Nivel MCER: <strong>${idm.nivel}</strong></span>
+        <button class="btn-icon-danger" onclick="eliminarIdioma(${idx})">&times;</button>
+      `;
+      listaId.appendChild(div);
+    });
+  }
 }
 
 // Renderizar cursos separados por Formación Específica y Formación General / Transversal
@@ -1491,6 +1514,8 @@ function renderizarTablasCursos() {
 
   tbodyEsp.innerHTML = '';
   tbodyGen.innerHTML = '';
+
+  if (!meritoActual || !Array.isArray(meritoActual.cursos)) return;
 
   let espCount = 0;
   let espIncluidos = 0;
@@ -1618,6 +1643,7 @@ function toggleInclusionCurso(idx, checked) {
 
 // Marcar o desmarcar todos los cursos de una categoría
 function marcarTodosCursos(tipo, checked) {
+  if (!meritoActual || !Array.isArray(meritoActual.cursos)) return;
   meritoActual.cursos.forEach(c => {
     const esEsp = (c.caracter === 'Específico' || (c.caracter || '').toLowerCase().includes('espec') || c.esEspecifico);
     if ((tipo === 'especifico' && esEsp) || (tipo === 'general' && !esEsp)) {
@@ -1686,45 +1712,53 @@ function cambiarPuestoExp(idx, val) {
 
 // Actualizar badges de puntos en las tablas del DOM inmediatamente
 function actualizarCeldasPuntosDOM() {
-  meritoActual.cursos.forEach((c, idx) => {
-    const badge = document.getElementById(`badgePtsCurso_${idx}`);
-    if (badge) {
-      const inc = (c.incluido !== false && c.activo !== false);
-      if (!inc) {
-        badge.textContent = `0.0000 pts (Excluido)`;
-        badge.className = 'badge badge-neutral badge-puntos-curso';
-      } else if (c.puntosBrutos !== undefined) {
-        badge.textContent = `${c.puntosBrutos.toFixed(4)} pts`;
-        badge.className = 'badge badge-info badge-puntos-curso';
-      }
-    }
-  });
+  if (!meritoActual) return;
 
-  meritoActual.experiencia.forEach((e, idx) => {
-    const badge = document.getElementById(`badgePtsExp_${idx}`);
-    if (badge && e.puntosBrutos !== undefined) {
-      badge.textContent = `${e.puntosBrutos.toFixed(4)} pts`;
-    }
-  });
+  if (Array.isArray(meritoActual.cursos)) {
+    meritoActual.cursos.forEach((c, idx) => {
+      const badge = document.getElementById(`badgePtsCurso_${idx}`);
+      if (badge) {
+        const inc = (c.incluido !== false && c.activo !== false);
+        if (!inc) {
+          badge.textContent = `0.0000 pts (Excluido)`;
+          badge.className = 'badge badge-neutral badge-puntos-curso';
+        } else if (c.puntosBrutos !== undefined) {
+          badge.textContent = `${c.puntosBrutos.toFixed(4)} pts`;
+          badge.className = 'badge badge-info badge-puntos-curso';
+        }
+      }
+    });
+  }
+
+  if (Array.isArray(meritoActual.experiencia)) {
+    meritoActual.experiencia.forEach((e, idx) => {
+      const badge = document.getElementById(`badgePtsExp_${idx}`);
+      if (badge && e.puntosBrutos !== undefined) {
+        badge.textContent = `${e.puntosBrutos.toFixed(4)} pts`;
+      }
+    });
+  }
 
   // Actualizar también los badges de resumen
   let espCount = 0, espIncluidos = 0, espHoras = 0, espPuntos = 0;
   let genCount = 0, genIncluidos = 0, genHoras = 0, genPuntos = 0;
 
-  meritoActual.cursos.forEach(c => {
-    const esEsp = (c.caracter === 'Específico' || (c.caracter || '').toLowerCase().includes('espec') || c.esEspecifico);
-    const inc = (c.incluido !== false && c.activo !== false);
-    const h = parseFloat(c.horas) || 0;
-    const pts = parseFloat(c.puntosBrutos) || 0;
+  if (Array.isArray(meritoActual.cursos)) {
+    meritoActual.cursos.forEach(c => {
+      const esEsp = (c.caracter === 'Específico' || (c.caracter || '').toLowerCase().includes('espec') || c.esEspecifico);
+      const inc = (c.incluido !== false && c.activo !== false);
+      const h = parseFloat(c.horas) || 0;
+      const pts = parseFloat(c.puntosBrutos) || 0;
 
-    if (esEsp) {
-      espCount++;
-      if (inc) { espIncluidos++; espHoras += h; espPuntos += pts; }
-    } else {
-      genCount++;
-      if (inc) { genIncluidos++; genHoras += h; genPuntos += pts; }
-    }
-  });
+      if (esEsp) {
+        espCount++;
+        if (inc) { espIncluidos++; espHoras += h; espPuntos += pts; }
+      } else {
+        genCount++;
+        if (inc) { genIncluidos++; genHoras += h; genPuntos += pts; }
+      }
+    });
+  }
 
   const badgeEsp = document.getElementById('badgeCursosEspResumen');
   if (badgeEsp) {
@@ -1787,6 +1821,15 @@ function eliminarArchivo(idx) {
 // Baremación individual en tiempo real
 async function recalcular() {
   if (!puestoSeleccionado) return;
+
+  if (!meritoActual) {
+    meritoActual = { cursos: [], experiencia: [], titulaciones: [], idiomas: [], archivosProcesados: [] };
+  }
+  if (!Array.isArray(meritoActual.cursos)) meritoActual.cursos = [];
+  if (!Array.isArray(meritoActual.experiencia)) meritoActual.experiencia = [];
+  if (!Array.isArray(meritoActual.titulaciones)) meritoActual.titulaciones = [];
+  if (!Array.isArray(meritoActual.idiomas)) meritoActual.idiomas = [];
+  if (!Array.isArray(meritoActual.archivosProcesados)) meritoActual.archivosProcesados = [];
 
   sincronizarAntiguedadAutomatica();
 
@@ -2516,6 +2559,15 @@ async function cargarAspiranteParaEditar(id) {
     const asp = lista.find(a => a.id === id);
     if (!asp) return;
 
+    // Inicializar meritoActual de inmediato para que cualquier evento subsecuente disponga de arrays válidos
+    meritoActual = {
+      cursos: Array.isArray(asp.merits?.cursos) ? JSON.parse(JSON.stringify(asp.merits.cursos)) : [],
+      experiencia: Array.isArray(asp.merits?.experiencia) ? JSON.parse(JSON.stringify(asp.merits.experiencia)) : [],
+      titulaciones: Array.isArray(asp.merits?.titulaciones) ? JSON.parse(JSON.stringify(asp.merits.titulaciones)) : [],
+      idiomas: Array.isArray(asp.merits?.idiomas) ? JSON.parse(JSON.stringify(asp.merits.idiomas)) : [],
+      archivosProcesados: Array.isArray(asp.merits?.archivosProcesados) ? JSON.parse(JSON.stringify(asp.merits.archivosProcesados)) : []
+    };
+
     document.getElementById('inputNombre').value = asp.nombre || '';
     document.getElementById('inputDNI').value = asp.dni || '';
     const selEst = document.getElementById('selectEstadoTramitacion');
@@ -2578,8 +2630,6 @@ async function cargarAspiranteParaEditar(id) {
     document.getElementById('chkConcilConyuge').checked = !!asp.conciliacionConyuge;
     document.getElementById('inputAntigVinculada').value = asp.antiguedadVinculadaDias || 0;
     document.getElementById('inputAntigOtras').value = asp.antiguedadOtrasDias || 0;
-
-    meritoActual = asp.merits || { cursos: [], experiencia: [], titulaciones: [], idiomas: [], archivosProcesados: [] };
 
     document.getElementById('navBtnIndividual').click();
     actualizarVistas();
