@@ -1565,3 +1565,50 @@ body {
   color: #166534;
   font-weight: 700;
 }
+
+/* Menú desplegable Backup */
+.btn-dropdown-action:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* Estilos de Impresión Oficial (@media print) */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 10pt;
+  }
+  .app-header,
+  .app-footer,
+  .main-nav,
+  .header-actions,
+  .actions-panel,
+  .upload-area,
+  .gate-overlay,
+  .modal,
+  .btn,
+  .ranking-header-controls,
+  .btn-sort-pill,
+  .checklist-header {
+    display: none !important;
+  }
+  .card {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  .container {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+  .data-table th, .data-table td {
+    border: 1px solid #333333 !important;
+    padding: 4px 6px !important;
+  }
+  .data-table th {
+    background-color: #f1f5f9 !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

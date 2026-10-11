@@ -181,5 +181,73 @@ function buildRankingExcelWorkbook(rankingData) {
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 }
 
-module.exports = { buildExcelWorkbook, buildRankingExcelWorkbook };
+function enmascararDniExcel(dni) {
+  if (!dni) return '***0000**';
+  const clean = dni.trim().toUpperCase();
+  if (clean.length === 9) {
+    return `***${clean.substring(3, 7)}**`;
+  }
+  const mid = Math.floor(clean.length / 2);
+  return `***${clean.substring(Math.max(0, mid - 2), Math.min(clean.length, mid + 2))}**`;
+}
+
+function buildAnonimizedRankingExcelWorkbook(rankingData) {
+  const { puesto, ranking, dotaciones, totalAspirantes } = rankingData;
+  const wb = XLSX.utils.book_new();
+  const isEsp = puesto.formaProvision === 'Concurso específico';
+
+  const rows = [
+    ["EXCMO. CABILDO INSULAR DE TENERIFE - IASS"],
+    ["COMISIÓN PERMANENTE DE VALORACIÓN • TRIBUNAL CALIFICADOR"],
+    ["LISTADO OFICIAL DE VALORACIÓN Y CLASIFICACIÓN (PUBLICACIÓN TABLÓN / SEDE ELECTRÓNICA - LOPDGDD)"],
+    [""],
+    ["Código RPT:", puesto.codigoRpt || puesto.id],
+    ["Denominación:", puesto.tipo],
+    ["Servicio / Unidad:", `${puesto.servicio || ''}${puesto.unidad ? ' (' + puesto.unidad + ')' : ''}`],
+    ["Localización:", puesto.localizacion || 'Santa Cruz de Tenerife'],
+    ["Dotaciones Convocadas:", dotaciones],
+    ["Fecha de Publicación:", new Date().toLocaleDateString('es-ES')],
+    ["Aviso Legal:", "Publicación anonimizada conforme a la Disposición Adicional Séptima de la Ley Orgánica 3/2018 (LOPDGDD)"],
+    [""],
+    [
+      "Nº Prelación",
+      "DNI Anonimizado",
+      "Apellidos y Nombre",
+      "Preferencia Opción",
+      "Puntuación Total",
+      "Propuesta Oficial",
+      isEsp ? "1º Específicos" : "1º Específicos",
+      "2º Grado Personal",
+      "3º Trabajo Desarrollado",
+      "4º Cursos Formación",
+      "5º Antigüedad"
+    ]
+  ];
+
+  ranking.forEach(r => {
+    rows.push([
+      r.orden,
+      enmascararDniExcel(r.dni),
+      r.nombre,
+      r.ordenPreferencia ? `${r.ordenPreferencia}ª opción` : '1ª opción',
+      r.puntuacionFinal,
+      r.estadoAdjudicacion === 'RESERVA' ? `RESERVA (Nº ${r.ordenReserva || 1})` : r.estadoAdjudicacion,
+      isEsp ? (r.desempate.fase2 || 0) : (r.desempate.meritosEspecificos || 0),
+      r.desempate.grado || 0,
+      r.desempate.trabajo || 0,
+      r.desempate.cursos || 0,
+      r.desempate.antiguedad || 0
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, "Listado_Oficial_Tablon");
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+}
+
+module.exports = { 
+  buildExcelWorkbook, 
+  buildRankingExcelWorkbook,
+  buildAnonimizedRankingExcelWorkbook 
+};
 

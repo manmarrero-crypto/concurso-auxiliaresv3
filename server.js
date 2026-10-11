@@ -6,7 +6,8 @@ const fs = require('fs');
 
 const { extractContentFromBuffer, analyzeTextForMerits } = require('./services/documentParser');
 const { calculateScore } = require('./services/calculator');
-const { buildExcelWorkbook, buildRankingExcelWorkbook } = require('./services/excelExporter');
+const { buildExcelWorkbook, buildRankingExcelWorkbook, buildAnonimizedRankingExcelWorkbook } = require('./services/excelExporter');
+const { buildActaWordDocument, buildNotificacionIndividualWordDocument } = require('./services/wordExporter');
 const { getAllAspirantes, saveAspirante, deleteAspirante } = require('./data/storage');
 const { computeRankingForPuesto, computeGlobalStatistics } = require('./services/adjudicationService');
 
@@ -498,6 +499,122 @@ app.post('/api/export-excel', (req, res) => {
     res.send(buffer);
   } catch (error) {
     res.status(500).json({ error: 'Error al exportar Excel: ' + error.message });
+  }
+});
+
+// Exportación del Cuadro de Clasificación Anonimizado a Excel (LOPDGDD)
+app.post('/api/export-ranking-anonimizado-excel', (req, res) => {
+  try {
+    const { rankingData } = req.body;
+    if (!rankingData || !rankingData.puesto || !rankingData.ranking) {
+      return res.status(400).json({ error: 'Faltan datos de clasificación para exportar' });
+    }
+
+    const buffer = buildAnonimizedRankingExcelWorkbook(rankingData);
+    const cod = (rankingData.puesto.codigoRpt || rankingData.puesto.id || 'Puesto').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `Listado_Oficial_Tablon_LOPD_${cod}_Cabildo.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al exportar Excel anonimizado: ' + error.message });
+  }
+});
+
+// Exportación del Acta Oficial del Tribunal a Word (.doc / OpenXML)
+app.post('/api/export-acta-word', (req, res) => {
+  try {
+    const { datosActa, rankingData } = req.body;
+    if (!rankingData || !rankingData.puesto || !rankingData.ranking) {
+      return res.status(400).json({ error: 'Faltan datos para redactar el Acta Oficial' });
+    }
+
+    const buffer = buildActaWordDocument(datosActa || {}, rankingData);
+    const cod = (rankingData.puesto.codigoRpt || rankingData.puesto.id || 'Puesto').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `Acta_Tribunal_Adjudicacion_${cod}_Cabildo.doc`;
+
+    res.setHeader('Content-Type', 'application/msword; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al generar Acta Oficial en Word: ' + error.message });
+  }
+});
+
+// Exportación de Ficha Individual de Notificación a Word
+app.post('/api/export-notificacion-word', (req, res) => {
+  try {
+    const { candidateData, calculationResult } = req.body;
+    if (!candidateData || !calculationResult) {
+      return res.status(400).json({ error: 'Faltan datos del candidato para generar la notificación' });
+    }
+
+    const buffer = buildNotificacionIndividualWordDocument(candidateData, calculationResult);
+    const dni = (candidateData.dni || 'Aspirante').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `Notificacion_Individual_Baremacion_${dni}_Cabildo.doc`;
+
+    res.setHeader('Content-Type', 'application/msword; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al generar Notificación en Word: ' + error.message });
+  }
+});
+
+// Descargar Copia de Seguridad completa (Backup)
+app.get('/api/backup', (req, res) => {
+  try {
+    const puestosPath = path.join(__dirname, 'data', 'puestos.json');
+    const puestos = fs.existsSync(puestosPath) ? JSON.parse(fs.readFileSync(puestosPath, 'utf8')) : [];
+    const aspirantes = getAllAspirantes();
+
+    const backupData = {
+      version: '1.0.0',
+      tipo: 'Copia de Seguridad Oficial - Concurso Auxiliares Cabildo de Tenerife',
+      fecha: new Date().toISOString(),
+      fechaLegible: new Date().toLocaleString('es-ES'),
+      totalPuestos: puestos.length,
+      totalAspirantes: aspirantes.length,
+      puestos,
+      aspirantes
+    };
+
+    const d = new Date();
+    const timestamp = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
+    const filename = `Backup_Concurso_Auxiliares_${timestamp}.json`;
+
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(JSON.stringify(backupData, null, 2));
+  } catch (error) {
+    res.status(500).json({ error: 'Error al generar copia de seguridad: ' + error.message });
+  }
+});
+
+// Restaurar copia de seguridad
+app.post('/api/restore', (req, res) => {
+  try {
+    const { aspirantes, puestos } = req.body;
+    if (!Array.isArray(aspirantes)) {
+      return res.status(400).json({ error: 'El archivo de copia de seguridad no contiene una lista válida de aspirantes' });
+    }
+
+    const aspirantesPath = path.join(__dirname, 'data', 'aspirantes.json');
+    fs.writeFileSync(aspirantesPath, JSON.stringify(aspirantes, null, 2), 'utf8');
+
+    if (Array.isArray(puestos) && puestos.length > 0) {
+      const puestosPath = path.join(__dirname, 'data', 'puestos.json');
+      fs.writeFileSync(puestosPath, JSON.stringify(puestos, null, 2), 'utf8');
+    }
+
+    res.json({
+      success: true,
+      mensaje: `Copia de seguridad restaurada con éxito: ${aspirantes.length} aspirantes y ${puestos ? puestos.length : 0} puestos.`,
+      totalAspirantes: aspirantes.length
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al restaurar copia de seguridad: ' + error.message });
   }
 });
 

@@ -90,6 +90,30 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
           Descargar Excel
         </button>
+        <!-- Menú de Copias de Seguridad (Backup) -->
+        <div class="dropdown-backup" style="position:relative; display:inline-block;">
+          <button id="btnBackupToggle" class="btn btn-outline" onclick="toggleMenuBackup(event)" style="border-color:#3b82f6; color:#1d4ed8; font-weight:600; font-size:0.775rem;" title="Copias de Seguridad y Respaldo">
+            💾 Copia de Seguridad
+          </button>
+          <div id="menuBackupDropdown" class="dropdown-content-backup" style="display:none; position:absolute; right:0; top:calc(100% + 4px); background:#ffffff; border:1px solid #cbd5e1; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1); border-radius:8px; z-index:1000; min-width:240px; padding:6px;">
+            <button type="button" class="btn-dropdown-action" onclick="ejecutarDescargaBackup()" style="width:100%; text-align:left; background:none; border:none; padding:8px 10px; font-size:0.775rem; cursor:pointer; border-radius:5px; color:#1e293b; display:flex; align-items:center; gap:8px;">
+              <span>📥</span>
+              <div>
+                <strong>Descargar Copia (.json)</strong>
+                <div style="font-size:0.7rem; color:#64748b;">Guardar todos los aspirantes y valoraciones</div>
+              </div>
+            </button>
+            <div style="height:1px; background:#f1f5f9; margin:4px 0;"></div>
+            <label class="btn-dropdown-action" style="width:100%; text-align:left; background:none; border:none; padding:8px 10px; font-size:0.775rem; cursor:pointer; border-radius:5px; color:#b45309; display:flex; align-items:center; gap:8px; margin:0;">
+              <span>📤</span>
+              <div>
+                <strong>Restaurar desde Copia...</strong>
+                <div style="font-size:0.7rem; color:#64748b;">Importar copia de seguridad previa</div>
+              </div>
+              <input type="file" id="inputRestaurarBackup" accept=".json" style="display:none;" onchange="procesarRestaurarBackup(event)">
+            </label>
+          </div>
+        </div>
         <button id="btnBloquearSesion" class="btn btn-outline" onclick="bloquearSesion()" title="Bloquear aplicación y cerrar sesión" style="border-color:#94a3b8; color:#475569; font-size:0.775rem;">
           🔒 Bloquear
         </button>
@@ -620,14 +644,20 @@
               <div id="desgloseContainer" class="desglose-grid mt-4"></div>
 
               <!-- Botones de Acción: Guardar Aspirante y Descargar Individual -->
-              <div class="actions-panel mt-4">
-                <button id="btnGuardarAspirante" class="btn btn-primary btn-lg">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                  Guardar Aspirante en el Concurso
+              <div class="actions-panel mt-4" style="display:flex; flex-wrap:wrap; gap:8px;">
+                <button id="btnGuardarAspirante" class="btn btn-primary" style="flex:1; min-width:190px;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                  Guardar Aspirante
                 </button>
-                <button id="btnDescargarExcelMain" class="btn btn-success btn-lg">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                  Descargar Ficha en Excel (.xlsx)
+                <button id="btnDescargarExcelMain" class="btn btn-success" style="flex:1; min-width:170px;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                  Ficha en Excel (.xlsx)
+                </button>
+                <button id="btnDescargarNotificacionWordMain" class="btn btn-outline" onclick="descargarNotificacionWordAspirante()" style="flex:1; min-width:190px; border-color:#2563eb; color:#1d4ed8; font-weight:600;" title="Descargar documento Word oficial con el desglose para entregar al aspirante o contestar alegación">
+                  📄 Notificación Word (.doc)
+                </button>
+                <button id="btnImprimirFichaMain" class="btn btn-outline" onclick="imprimirFichaOficial()" style="flex:1; min-width:130px; border-color:#64748b; color:#334155;" title="Imprimir o guardar en PDF la ficha de baremación del aspirante">
+                  🖨️ Imprimir / PDF
                 </button>
               </div>
             </div>
@@ -684,13 +714,19 @@
                 </div>
               </div>
 
-              <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
-                <button id="btnCargarMuestra" class="btn btn-outline" style="font-size:0.775rem;" title="Cargar varios aspirantes con méritos para simular adjudicaciones y listas de reserva">
+              <div style="display:flex; gap:6px; align-items:center; flex-shrink:0; flex-wrap:wrap;">
+                <button id="btnCargarMuestra" class="btn btn-outline" style="font-size:0.75rem;" title="Cargar varios aspirantes con méritos para simular adjudicaciones y listas de reserva">
                   👥 Simular con Muestras
                 </button>
-                <button id="btnExportarRankingExcel" class="btn btn-success">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                  Descargar Acta en Excel (.xlsx)
+                <button id="btnAbrirModalActa" class="btn btn-outline" onclick="abrirModalConfigActa()" style="border-color:#1e40af; color:#1e40af; font-weight:700; font-size:0.775rem; background:#eff6ff;" title="Generar documento oficial de Acta del Tribunal en Word (.doc) para formalizar el acuerdo">
+                  📄 Acta Oficial (Word)
+                </button>
+                <button id="btnExportarRankingAnonimizado" class="btn btn-outline" onclick="exportarRankingAnonimizadoExcel()" style="border-color:#7c3aed; color:#6d28d9; font-weight:600; font-size:0.775rem; background:#f5f3ff;" title="Descargar listado con DNI anonimizado (***1234**) listo para publicar en Tablón / Sede Electrónica (LOPDGDD)">
+                  🔒 Listado Tablón (LOPD)
+                </button>
+                <button id="btnExportarRankingExcel" class="btn btn-success" style="font-size:0.775rem;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                  Acta en Excel (.xlsx)
                 </button>
               </div>
             </div>
@@ -1155,6 +1191,75 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" onclick="cerrarModales()">Cancelar</button>
         <button type="button" id="btnGuardarNuevoPuestoModal" class="btn btn-primary" onclick="guardarNuevoPuestoModal()">➕ Guardar y Ofertar Puesto</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para Configurar y Generar el Acta Oficial del Tribunal en Word -->
+  <div id="modalConfigActa" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width: 650px;">
+      <div class="modal-header" style="background:#1e3a8a; color:#ffffff;">
+        <h3 id="modalConfigActaTitulo" style="color:#ffffff; margin:0; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+          <span>🏛️</span> Configuración del Acta Oficial del Tribunal
+        </h3>
+        <button class="close-btn" onclick="cerrarModales()" style="color:#ffffff;">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="help-text mb-2" style="font-size:0.8rem;">
+          Se redactará un documento formal de Acta en Microsoft Word (.doc) con el formato institucional del Cabildo, relación ordenada de concursantes, aplicación de la Base Novena, propuesta de adjudicación y lista de reserva oficial:
+        </p>
+        
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="actaFecha">Fecha de la Sesión *</label>
+            <input type="date" id="actaFecha" class="form-control" style="font-weight:600;">
+          </div>
+          <div class="form-group flex-1">
+            <label for="actaHora">Hora de Inicio *</label>
+            <input type="text" id="actaHora" class="form-control" value="10:00 horas">
+          </div>
+          <div class="form-group flex-1">
+            <label for="actaHoraFin">Hora de Finalización</label>
+            <input type="text" id="actaHoraFin" class="form-control" value="12:00 horas">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="actaLugar">Lugar de Celebración *</label>
+          <input type="text" id="actaLugar" class="form-control" value="Palacio Insular, Plaza de España s/n, Santa Cruz de Tenerife">
+        </div>
+
+        <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:10px; margin-bottom:12px;">
+          <div style="font-size:0.8rem; font-weight:700; color:#1e3a8a; margin-bottom:6px;">COMPOSICIÓN DEL TRIBUNAL CALIFICADOR:</div>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="actaPresidente">Presidencia *</label>
+              <input type="text" id="actaPresidente" class="form-control" value="D./Dña. Titular de la Presidencia">
+            </div>
+            <div class="form-group flex-1">
+              <label for="actaSecretario">Secretaría del Tribunal *</label>
+              <input type="text" id="actaSecretario" class="form-control" value="D./Dña. Titular de la Secretaría">
+            </div>
+          </div>
+          <div class="form-group mb-0">
+            <label for="actaVocales">Vocalías (separadas por comas)</label>
+            <input type="text" id="actaVocales" class="form-control" value="D./Dña. Primer/a Vocal, D./Dña. Segundo/a Vocal">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="custom-checkbox" style="font-size:0.85rem; font-weight:600; color:#1e293b;">
+            <input type="checkbox" id="chkActaAnonimizarDni">
+            <span class="checkmark"></span>
+            Anonimizar DNI en el Acta para publicación pública (ej: ***1234**) conforme a LOPDGDD
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer" style="background:#f1f5f9; display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" class="btn btn-outline" onclick="cerrarModales()">Cancelar</button>
+        <button type="button" id="btnDescargarActaWordFinal" class="btn btn-primary" onclick="ejecutarDescargaActaWord()" style="background:#1e3a8a; border-color:#1e3a8a; font-weight:700; display:flex; align-items:center; gap:6px;">
+          📥 Descargar Acta Oficial en Word (.doc)
+        </button>
       </div>
     </div>
   </div>

@@ -3512,3 +3512,348 @@ function exportarAuditoriaExcel() {
   }
 }
 
+// ============================================================================
+// FASE 1: INFORMES OFICIALES, ACTAS EN WORD, EXPORTACIÓN LOPD Y BACKUP
+// ============================================================================
+
+// Control del menú desplegable de Copias de Seguridad (Backup)
+function toggleMenuBackup(e) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById('menuBackupDropdown');
+  if (!menu) return;
+  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+}
+
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('menuBackupDropdown');
+  if (menu && menu.style.display === 'block') {
+    if (!e.target.closest('.dropdown-backup')) {
+      menu.style.display = 'none';
+    }
+  }
+});
+
+// Descargar Copia de Seguridad completa (.json)
+async function ejecutarDescargaBackup() {
+  const menu = document.getElementById('menuBackupDropdown');
+  if (menu) menu.style.display = 'none';
+
+  try {
+    const res = await fetch(`${API_BASE}/api/backup`);
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const d = new Date();
+      const ts = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
+      a.download = `Backup_Concurso_Auxiliares_${ts}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      mostrarToast('Copia Descargada', 'Copia de seguridad guardada con éxito.');
+      return;
+    }
+  } catch (err) {}
+
+  // Fallback cliente
+  const aspirantes = obtenerAspirantesCliente();
+  const backupData = {
+    version: '1.0.0',
+    fecha: new Date().toISOString(),
+    fechaLegible: new Date().toLocaleString('es-ES'),
+    totalAspirantes: aspirantes.length,
+    totalPuestos: catalogoPuestos.length,
+    aspirantes,
+    puestos: catalogoPuestos
+  };
+  const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Backup_Concurso_Auxiliares_${new Date().toISOString().substring(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+  mostrarToast('Copia Descargada', 'Copia de seguridad local generada con éxito.');
+}
+
+// Restaurar copia de seguridad desde archivo .json subido
+async function procesarRestaurarBackup(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async (event) => {
+    try {
+      const data = JSON.parse(event.target.result);
+      if (!data || !Array.isArray(data.aspirantes)) {
+        alert('El archivo seleccionado no es una copia de seguridad válida de la aplicación.');
+        return;
+      }
+
+      const confirmar = confirm(`¿Estás seguro de que deseas restaurar la copia de seguridad?\n\nFecha de la copia: ${data.fechaLegible || data.fecha || 'Desconocida'}\nAspirantes a restaurar: ${data.aspirantes.length}\nPuestos en catálogo: ${data.puestos ? data.puestos.length : 'Sin cambios'}\n\n⚠️ Esta acción actualizará los datos del tribunal.`);
+      if (!confirmar) {
+        e.target.value = '';
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/api/restore`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ aspirantes: data.aspirantes, puestos: data.puestos })
+        });
+        if (res.ok) {
+          const resData = await res.json();
+          mostrarToast('Copia Restaurada', resData.mensaje || 'Datos restaurados con éxito.');
+          setTimeout(() => window.location.reload(), 1000);
+          return;
+        }
+      } catch (serverErr) {}
+
+      // Fallback local
+      localStorage.setItem('aspirantes_concurso', JSON.stringify(data.aspirantes));
+      if (Array.isArray(data.puestos)) {
+        catalogoPuestos = data.puestos;
+      }
+      mostrarToast('Copia Restaurada', `Restaurados ${data.aspirantes.length} aspirantes.`);
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (err) {
+      alert('Error al leer el archivo de copia de seguridad: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// Abrir Modal de Configuración del Acta Oficial
+function abrirModalConfigActa() {
+  if (!datosRankingActual || !datosRankingActual.puesto) {
+    alert('Por favor, selecciona primero un puesto en el Cuadro de Adjudicación para redactar su acta.');
+    return;
+  }
+
+  const p = datosRankingActual.puesto;
+  const tit = document.getElementById('modalConfigActaTitulo');
+  if (tit) {
+    tit.innerHTML = `<span>🏛️</span> Acta Oficial: [${p.codigoRpt || p.id}] ${p.tipo}`;
+  }
+
+  const fInput = document.getElementById('actaFecha');
+  if (fInput && !fInput.value) {
+    fInput.value = new Date().toISOString().split('T')[0];
+  }
+
+  const modal = document.getElementById('modalConfigActa');
+  if (modal) modal.style.display = 'flex';
+}
+
+// Ejecutar Descarga del Acta Oficial en Word (.doc)
+async function ejecutarDescargaActaWord() {
+  if (!datosRankingActual || !datosRankingActual.puesto) return;
+
+  const datosActa = {
+    fecha: document.getElementById('actaFecha')?.value || new Date().toISOString().split('T')[0],
+    hora: document.getElementById('actaHora')?.value || '10:00 horas',
+    horaFin: document.getElementById('actaHoraFin')?.value || '12:00 horas',
+    lugar: document.getElementById('actaLugar')?.value || 'Palacio Insular, Plaza de España s/n, Santa Cruz de Tenerife',
+    presidente: document.getElementById('actaPresidente')?.value || 'D./Dña. Titular de la Presidencia',
+    secretario: document.getElementById('actaSecretario')?.value || 'D./Dña. Titular de la Secretaría',
+    vocales: (document.getElementById('actaVocales')?.value || '').split(',').map(v => v.trim()).filter(Boolean),
+    anonimizar: document.getElementById('chkActaAnonimizarDni')?.checked || false
+  };
+
+  const btn = document.getElementById('btnDescargarActaWordFinal');
+  const textoPrevio = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<div class="spinner" style="width:14px; height:14px; border-width:2px; display:inline-block; margin-right:6px;"></div> Redactando Acta...`;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/export-acta-word`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ datosActa, rankingData: datosRankingActual })
+    });
+
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const codLimpio = (datosRankingActual.puesto.codigoRpt || datosRankingActual.puesto.id || 'Puesto').replace(/[^a-zA-Z0-9]/g, '_');
+      a.download = `Acta_Tribunal_Adjudicacion_${codLimpio}_Cabildo.doc`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      cerrarModales();
+      mostrarToast('Acta Generada', 'Acta Oficial del Tribunal descargada en Word (.doc).');
+      return;
+    }
+  } catch (err) {
+    console.error('Error al exportar acta en Word desde servidor:', err);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = textoPrevio;
+    }
+  }
+
+  alert('No se pudo conectar con el servidor para generar el acta. Por favor, asegúrate de que el servicio está activo.');
+}
+
+// Exportar Listado Anonimizado para Tablón / Sede Electrónica (LOPDGDD)
+async function exportarRankingAnonimizadoExcel() {
+  if (!datosRankingActual || !datosRankingActual.puesto || !datosRankingActual.ranking) {
+    alert('Por favor, selecciona primero un puesto con datos de clasificación.');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/export-ranking-anonimizado-excel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rankingData: datosRankingActual })
+    });
+
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const cod = (datosRankingActual.puesto.codigoRpt || datosRankingActual.puesto.id || 'Puesto').replace(/[^a-zA-Z0-9]/g, '_');
+      a.download = `Listado_Oficial_Tablon_LOPD_${cod}_Cabildo.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      mostrarToast('Listado Anonimizado', 'Excel generado con DNI protegido para publicación en Sede/Tablón.');
+      return;
+    }
+  } catch (err) {}
+
+  // Fallback cliente con SheetJS
+  try {
+    const p = datosRankingActual.puesto;
+    const ranking = datosRankingActual.ranking;
+    const isEsp = p.formaProvision === 'Concurso específico';
+    const wb = XLSX.utils.book_new();
+
+    const enmascarar = (dni) => {
+      if (!dni) return '***0000**';
+      const clean = dni.trim().toUpperCase();
+      if (clean.length === 9) return `***${clean.substring(3, 7)}**`;
+      const mid = Math.floor(clean.length / 2);
+      return `***${clean.substring(Math.max(0, mid - 2), Math.min(clean.length, mid + 2))}**`;
+    };
+
+    const rows = [
+      ["EXCMO. CABILDO INSULAR DE TENERIFE - IASS"],
+      ["TRIBUNAL CALIFICADOR • CONCURSO SUBESCALA AUXILIAR ADMINISTRATIVA"],
+      ["LISTADO OFICIAL PARA TABLÓN DE ANUNCIOS Y SEDE ELECTRÓNICA (LOPDGDD)"],
+      [""],
+      ["Código RPT:", p.codigoRpt || p.id],
+      ["Denominación:", p.tipo],
+      ["Servicio:", p.servicio || '-'],
+      ["Dotaciones:", p.dotaciones || 1],
+      ["Fecha de Exposición:", new Date().toLocaleDateString('es-ES')],
+      ["Nota:", "DNI enmascarado conforme a la D.A. Séptima de la Ley Orgánica 3/2018"],
+      [""],
+      [
+        "Nº Prelación",
+        "DNI Anonimizado",
+        "Apellidos y Nombre",
+        "Preferencia",
+        "Puntos Finales",
+        "Propuesta Oficial",
+        isEsp ? "1º Específicos" : "1º Específicos",
+        "2º Grado Personal",
+        "3º Trabajo Desarrollado",
+        "4º Cursos Formación",
+        "5º Antigüedad"
+      ]
+    ];
+
+    ranking.forEach(r => {
+      rows.push([
+        r.orden,
+        enmascarar(r.dni),
+        r.nombre,
+        r.ordenPreferencia ? `${r.ordenPreferencia}ª opción` : '1ª opción',
+        r.puntuacionFinal,
+        r.estadoAdjudicacion === 'RESERVA' ? `RESERVA (Nº ${r.ordenReserva || 1})` : r.estadoAdjudicacion,
+        isEsp ? (r.desempate.fase2 || 0) : (r.desempate.meritosEspecificos || 0),
+        r.desempate.grado || 0,
+        r.desempate.trabajo || 0,
+        r.desempate.cursos || 0,
+        r.desempate.antiguedad || 0
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Tablon_LOPD");
+    const cod = (p.codigoRpt || p.id || 'Puesto').replace(/[^a-zA-Z0-9]/g, '_');
+    XLSX.writeFile(wb, `Listado_Oficial_Tablon_LOPD_${cod}_Cabildo.xlsx`);
+    mostrarToast('Listado Anonimizado', 'Excel generado con DNI protegido para publicación en Sede/Tablón.');
+  } catch (clientErr) {
+    alert('Error al generar Excel anonimizado: ' + clientErr.message);
+  }
+}
+
+// Descargar Ficha Individual de Notificación del Aspirante en Word (.doc)
+async function descargarNotificacionWordAspirante() {
+  if (!ultimoCalculo) {
+    recalcular();
+  }
+
+  const datosAspirante = {
+    nombre: document.getElementById('candNombre')?.value || 'Aspirante',
+    dni: document.getElementById('candDni')?.value || '-',
+    situacionAdministrativa: document.getElementById('candSituacion')?.value || 'definitiva',
+    gradoPersonal: document.getElementById('candGrado')?.value || '14',
+    conciliacionHijos: document.getElementById('chkHijos')?.checked || false,
+    conciliacionConyuge: document.getElementById('chkConyuge')?.checked || false,
+    puestoSolicitado: puestoSeleccionado || catalogoPuestos[0],
+    puestosSolicitados: puestosSolicitadosUsuario,
+    merits: meritoActual
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/api/export-notificacion-word`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ candidateData: datosAspirante, calculationResult: ultimoCalculo })
+    });
+
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const dniLimpio = (datosAspirante.dni || 'Aspirante').replace(/[^a-zA-Z0-9]/g, '_');
+      a.download = `Notificacion_Individual_Baremacion_${dniLimpio}_Cabildo.doc`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      mostrarToast('Notificación Word Generada', 'Ficha individual oficial redactada para el aspirante.');
+      return;
+    }
+  } catch (err) {
+    console.error('Error al generar notificación Word:', err);
+  }
+
+  alert('No se pudo generar la notificación en Word desde el servidor. Comprueba la conexión.');
+}
+
+// Imprimir Ficha Oficial de Baremación (o Guardar como PDF)
+function imprimirFichaOficial() {
+  if (!ultimoCalculo) recalcular();
+  window.print();
+}
+
