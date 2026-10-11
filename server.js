@@ -1,0 +1,495 @@
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const { extractContentFromBuffer, analyzeTextForMerits } = require('./services/documentParser');
+const { calculateScore } = require('./services/calculator');
+const { buildExcelWorkbook, buildRankingExcelWorkbook } = require('./services/excelExporter');
+const { getAllAspirantes, saveAspirante, deleteAspirante } = require('./data/storage');
+const { computeRankingForPuesto } = require('./services/adjudicationService');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Multer storage en memoria para no dejar residuos en disco
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 30 * 1024 * 1024 } // Hasta 30MB por archivo
+});
+
+// Catálogo de puestos
+app.get('/api/puestos', (req, res) => {
+  try {
+    const puestosPath = path.join(__dirname, 'data', 'puestos.json');
+    const data = fs.readFileSync(puestosPath, 'utf8');
+    res.json(JSON.parse(data));
+  } catch (error) {
+    res.status(500).json({ error: 'Error al cargar el catálogo de puestos' });
+  }
+});
+
+// Añadir / Ofertar nuevo puesto en el catálogo (Ordinario, 1ª Resultas o 2ª Resultas)
+app.post('/api/puestos', (req, res) => {
+  try {
+    const puestosPath = path.join(__dirname, 'data', 'puestos.json');
+    const puestos = JSON.parse(fs.readFileSync(puestosPath, 'utf8'));
+    const nuevo = req.body;
+
+    if (!nuevo.codigoRpt && !nuevo.id) {
+      return res.status(400).json({ error: 'Se requiere Código RPT del puesto' });
+    }
+
+    const cod = (nuevo.codigoRpt || nuevo.id).toUpperCase().trim();
+    const puestoFinal = {
+      id: cod,
+      codigoRpt: cod,
+      tipo: nuevo.tipo || 'Auxiliar Administrativo/a',
+      formaProvision: nuevo.formaProvision || 'Concurso ordinario',
+      cd: parseInt(nuevo.cd, 10) || 16,
+      ce: parseInt(nuevo.ce, 10) || 28,
+      dotaciones: parseInt(nuevo.dotaciones, 10) || 1,
+      consejeria: nuevo.consejeria || 'Cabildo Insular de Tenerife',
+      entidad: nuevo.entidad || 'Cabildo de Tenerife',
+      servicio: nuevo.servicio || 'Servicio General',
+      unidad: nuevo.unidad || '',
+      localizacion: nuevo.localizacion || 'Zona metropolitana Santa Cruz de Tenerife- La Laguna',
+      requisitoExperiencia: nuevo.requisitoExperiencia || '18 meses en Administración Pública',
+      minimoSuperar: nuevo.formaProvision === 'Concurso específico' ? 4 : 1.5,
+      esPuestoUnico: !!nuevo.esPuestoUnico,
+      faseOferta: nuevo.faseOferta || 'ordinaria', // 'ordinaria' | '1a_resultas' | '2a_resultas'
+      liberadoPor: nuevo.liberadoPor || null,
+      descripcion: `${nuevo.servicio || 'Servicio'} [${nuevo.localizacion || 'S/C'}]`,
+      denominacionLarga: `[${cod}] ${nuevo.tipo || 'Auxiliar'} - ${nuevo.servicio || 'Servicio'} (${nuevo.localizacion || 'S/C'})`
+    };
+
+    const existIdx = puestos.findIndex(p => (p.codigoRpt || p.id).toUpperCase() === cod);
+    if (existIdx >= 0) {
+      puestos[existIdx] = { ...puestos[existIdx], ...puestoFinal };
+    } else {
+      puestos.push(puestoFinal);
+    }
+
+    fs.writeFileSync(puestosPath, JSON.stringify(puestos, null, 2), 'utf8');
+    res.json({ success: true, puesto: puestoFinal, total: puestos.length });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al añadir puesto: ' + error.message });
+  }
+});
+
+// Incorporar al catálogo una plaza liberada por un funcionario definitivo
+app.post('/api/puestos/incorporar-liberado', (req, res) => {
+  try {
+    const puestosPath = path.join(__dirname, 'data', 'puestos.json');
+    const puestos = JSON.parse(fs.readFileSync(puestosPath, 'utf8'));
+    const plaza = req.body.plazaLiberada || req.body;
+
+    const cod = (plaza.codigoRpt || plaza.id || `RES-${Date.now()}`).toUpperCase().trim();
+    const existIdx = puestos.findIndex(p => (p.codigoRpt || p.id).toUpperCase() === cod);
+
+    const puestoFinal = {
+      id: cod,
+      codigoRpt: cod,
+      tipo: plaza.tipo || 'Auxiliar Administrativo/a',
+      formaProvision: plaza.formaProvision || 'Concurso ordinario',
+      cd: parseInt(plaza.cd, 10) || 16,
+      ce: parseInt(plaza.ce, 10) || 28,
+      dotaciones: 1,
+      consejeria: plaza.consejeria || 'Cabildo Insular de Tenerife',
+      entidad: plaza.entidad || 'Cabildo de Tenerife',
+      servicio: plaza.servicio || 'Servicio procedente de resulta',
+      unidad: plaza.unidad || '',
+      localizacion: plaza.localizacion || 'Zona metropolitana Santa Cruz de Tenerife- La Laguna',
+      requisitoExperiencia: '18 meses en la Subescala Administrativa',
+      minimoSuperar: plaza.formaProvision === 'Concurso específico' ? 4 : 1.5,
+      esPuestoUnico: false,
+      faseOferta: plaza.faseLiberacion === '2ª Resultas' ? '2a_resultas' : '1a_resultas',
+      liberadoPor: plaza.liberadoPor || plaza.origenAspirante || 'Titular definitivo',
+      dniLiberador: plaza.dniLiberador || plaza.dniAspirante || '',
+      descripcion: `Plaza resulta liberada por ${plaza.liberadoPor || 'titular'} (${plaza.servicio || 'Servicio'})`,
+      denominacionLarga: `[${cod}] ${plaza.tipo || 'Auxiliar'} - ${plaza.servicio || 'Servicio'} [Oferta en ${plaza.faseLiberacion || 'Resultas'}]`
+    };
+
+    if (existIdx >= 0) {
+      puestos[existIdx] = { ...puestos[existIdx], ...puestoFinal };
+    } else {
+      puestos.unshift(puestoFinal);
+    }
+
+    fs.writeFileSync(puestosPath, JSON.stringify(puestos, null, 2), 'utf8');
+    res.json({ success: true, puesto: puestoFinal, total: puestos.length });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al incorporar plaza liberada: ' + error.message });
+  }
+});
+
+// Aspirantes persistidos
+app.get('/api/aspirantes', (req, res) => {
+  try {
+    const list = getAllAspirantes();
+    res.json(list);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener aspirantes: ' + error.message });
+  }
+});
+
+app.post('/api/aspirantes', (req, res) => {
+  try {
+    const aspirante = req.body;
+    if (!aspirante.dni && !aspirante.nombre) {
+      return res.status(400).json({ error: 'El aspirante debe tener DNI o Nombre' });
+    }
+    const guardado = saveAspirante(aspirante);
+    res.json({ success: true, aspirante: guardado });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al guardar aspirante: ' + error.message });
+  }
+});
+
+app.delete('/api/aspirantes/:id', (req, res) => {
+  try {
+    const success = deleteAspirante(req.params.id);
+    res.json({ success });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar aspirante: ' + error.message });
+  }
+});
+
+// Cuadro de clasificación y adjudicación de un puesto
+app.get('/api/clasificacion/:puestoId', (req, res) => {
+  try {
+    const puestosPath = path.join(__dirname, 'data', 'puestos.json');
+    const puestos = JSON.parse(fs.readFileSync(puestosPath, 'utf8'));
+    const puesto = puestos.find(p => p.id === req.params.puestoId || p.codigoRpt === req.params.puestoId || p.tipo === req.params.puestoId);
+
+    if (!puesto) {
+      return res.status(404).json({ error: 'Puesto no encontrado' });
+    }
+
+    const aspirantes = getAllAspirantes();
+    const resultadoRanking = computeRankingForPuesto(puesto, aspirantes, puestos);
+    res.json(resultadoRanking);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al calcular clasificación: ' + error.message });
+  }
+});
+
+// Cargar candidatos de muestra / simulación para ver adjudicaciones y listas de reserva
+app.post('/api/aspirantes/cargar-muestra', (req, res) => {
+  try {
+    const puestosPath = path.join(__dirname, 'data', 'puestos.json');
+    const puestos = JSON.parse(fs.readFileSync(puestosPath, 'utf8'));
+    const p1 = puestos.find(p => p.codigoRpt === 'FC1843') || puestos[0];
+    const p2 = puestos.find(p => p.codigoRpt === 'FC1897') || puestos[1];
+    const p3 = puestos.find(p => p.codigoRpt === 'FC1808') || puestos[2];
+
+    const muestras = [
+      {
+        id: '23456789A',
+        dni: '23456789A',
+        nombre: 'Carmen Rosa Morales Delgado',
+        situacionAdministrativa: 'definitiva',
+        puestoOrigen: 'FC1843 / Auxiliar Adm. Proyectos Estratégicos',
+        participaResultas: false,
+        puestosSolicitados: [
+          { ...p1, orden: 1 },
+          { ...p2, orden: 2 }
+        ],
+        puestoSolicitado: p1,
+        gradoPersonal: '18',
+        conciliacionHijos: true,
+        conciliacionConyuge: false,
+        antiguedadVinculadaDias: 5475, // 15 años
+        antiguedadOtrasDias: 365,
+        merits: {
+          cursos: [
+            { titulo: 'Gestión Administrativa y Expedientes Electrónicos', horas: 120, tipo: 'Aprovechamiento', caracter: 'Específico', esEspecifico: true, incluido: true },
+            { titulo: 'Procedimiento Administrativo Común', horas: 80, tipo: 'Aprovechamiento', caracter: 'Específico', esEspecifico: true, incluido: true },
+            { titulo: 'Prevención de Riesgos Laborales', horas: 60, tipo: 'Aprovechamiento', caracter: 'General / Transversal', esEspecifico: false, incluido: true }
+          ],
+          experiencia: [
+            { puesto: 'Auxiliar Administrativo/a', administracion: 'Cabildo de Tenerife', cd: 16, dias: 3650, tipoPlaza: 'vinculada', esEspecificaAmbito: true },
+            { puesto: 'Auxiliar Administrativo/a Adscrito/a', administracion: 'Cabildo de Tenerife', cd: 14, dias: 1825, tipoPlaza: 'vinculada', esEspecificaAmbito: false }
+          ],
+          titulaciones: [
+            { tipo: 'Grado / Licenciatura / Diplomatura', denominacion: 'Diplomatura en Gestión Pública' }
+          ],
+          idiomas: [
+            { idioma: 'INGLÉS', nivel: 'B2' }
+          ],
+          antiguedadVinculadaDias: 5475,
+          antiguedadOtrasDias: 365
+        }
+      },
+      {
+        id: '34567890B',
+        dni: '34567890B',
+        nombre: 'Francisco Javier Santana Hernández',
+        situacionAdministrativa: 'definitiva',
+        puestoOrigen: 'FC1808 / Auxiliar Adm. Carreteras',
+        participaResultas: true,
+        puestosSolicitados: [
+          { ...p1, orden: 1 },
+          { ...p3, orden: 2 }
+        ],
+        puestoSolicitado: p1,
+        gradoPersonal: '16',
+        conciliacionHijos: false,
+        conciliacionConyuge: true,
+        antiguedadVinculadaDias: 3650, // 10 años
+        antiguedadOtrasDias: 0,
+        merits: {
+          cursos: [
+            { titulo: 'Ofimática Avanzada y Herramientas Digitales', horas: 60, tipo: 'Aprovechamiento', caracter: 'Específico', esEspecifico: true, incluido: true },
+            { titulo: 'Transparencia y Buen Gobierno', horas: 40, tipo: 'Asistencia', caracter: 'General / Transversal', esEspecifico: false, incluido: true }
+          ],
+          experiencia: [
+            { puesto: 'Auxiliar Administrativo/a', administracion: 'Cabildo de Tenerife', cd: 16, dias: 3650, tipoPlaza: 'vinculada', esEspecificaAmbito: false }
+          ],
+          titulaciones: [
+            { tipo: 'Ciclo Formativo Grado Superior (CFGS)', denominacion: 'Técnico Superior en Administración y Finanzas' }
+          ],
+          idiomas: [],
+          antiguedadVinculadaDias: 3650,
+          antiguedadOtrasDias: 0
+        }
+      },
+      {
+        id: '45678901C',
+        dni: '45678901C',
+        nombre: 'Beatriz Reyes Cabrera',
+        situacionAdministrativa: 'definitiva',
+        puestoOrigen: 'FC1897 / Gestor de Contenidos Digitales',
+        participaResultas: true,
+        puestosSolicitados: [
+          { ...p2, orden: 1 },
+          { ...p1, orden: 2 }
+        ],
+        puestoSolicitado: p2,
+        gradoPersonal: '16',
+        conciliacionHijos: false,
+        conciliacionConyuge: false,
+        antiguedadVinculadaDias: 2555, // 7 años
+        antiguedadOtrasDias: 730,
+        merits: {
+          cursos: [
+            { titulo: 'Atención a la Ciudadanía y Canales Digitales', horas: 100, tipo: 'Aprovechamiento', caracter: 'Específico', esEspecifico: true, incluido: true },
+            { titulo: 'Igualdad de Género en la Administración', horas: 50, tipo: 'Aprovechamiento', caracter: 'General / Transversal', esEspecifico: false, incluido: true }
+          ],
+          experiencia: [
+            { puesto: 'Gestor/a de Servicios', administracion: 'Cabildo de Tenerife', cd: 18, dias: 1500, tipoPlaza: 'vinculada', esEspecificaAmbito: true },
+            { puesto: 'Auxiliar Administrativo/a', administracion: 'Cabildo de Tenerife', cd: 16, dias: 1055, tipoPlaza: 'vinculada', esEspecificaAmbito: false }
+          ],
+          titulaciones: [],
+          idiomas: [
+            { idioma: 'INGLÉS', nivel: 'B1' }
+          ],
+          antiguedadVinculadaDias: 2555,
+          antiguedadOtrasDias: 730
+        }
+      },
+      {
+        id: '56789012D',
+        dni: '56789012D',
+        nombre: 'Elena Torres Medina',
+        situacionAdministrativa: 'provisional',
+        puestoOrigen: 'Adscripción Provisional - Interinidad Cabildo',
+        participaResultas: true,
+        puestosSolicitados: [
+          { ...p1, orden: 1 },
+          { ...p3, orden: 2 }
+        ],
+        puestoSolicitado: p1,
+        gradoPersonal: '14',
+        conciliacionHijos: true,
+        conciliacionConyuge: false,
+        antiguedadVinculadaDias: 1460, // 4 años
+        antiguedadOtrasDias: 365,
+        merits: {
+          cursos: [
+            { titulo: 'Procedimiento Electrónico y Notificaciones', horas: 40, tipo: 'Aprovechamiento', caracter: 'Específico', esEspecifico: true, incluido: true },
+            { titulo: 'Protección de Datos en la Administración Pública', horas: 30, tipo: 'Aprovechamiento', caracter: 'General / Transversal', esEspecifico: false, incluido: true }
+          ],
+          experiencia: [
+            { puesto: 'Auxiliar Administrativo/a', administracion: 'Cabildo de Tenerife', cd: 14, dias: 1460, tipoPlaza: 'vinculada', esEspecificaAmbito: false }
+          ],
+          titulaciones: [],
+          idiomas: [
+            { idioma: 'FRANCÉS', nivel: 'B2' }
+          ],
+          antiguedadVinculadaDias: 1460,
+          antiguedadOtrasDias: 365
+        }
+      }
+    ];
+
+    muestras.forEach(m => saveAspirante(m));
+    const listaActualizada = getAllAspirantes();
+    res.json({ success: true, totalAspirantes: listaActualizada.length, mensaje: 'Candidatos de muestra incorporados con éxito' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error cargando candidatos de muestra: ' + error.message });
+  }
+});
+
+// Exportación del Cuadro de Clasificación / Acta a Excel
+app.post('/api/export-ranking-excel', (req, res) => {
+  try {
+    const { rankingData } = req.body;
+    if (!rankingData || !rankingData.puesto || !rankingData.ranking) {
+      return res.status(400).json({ error: 'Faltan datos de clasificación para exportar' });
+    }
+
+    const buffer = buildRankingExcelWorkbook(rankingData);
+    const nombrePuestoLimpio = rankingData.puesto.tipo.replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `Acta_Adjudicacion_${nombrePuestoLimpio}_Cabildo.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al exportar ranking a Excel: ' + error.message });
+  }
+});
+
+// Procesamiento de documentos (PDF / Word)
+app.post('/api/upload-document', upload.array('documentos', 15), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No se ha subido ningún archivo' });
+    }
+
+    const processedResults = [];
+
+    for (const file of req.files) {
+      try {
+        const extracted = await extractContentFromBuffer(file.buffer, file.mimetype, file.originalname);
+        const analysis = analyzeTextForMerits(extracted.text, file.originalname, extracted.html);
+        processedResults.push({
+          success: true,
+          archivo: file.originalname,
+          size: file.size,
+          ...analysis
+        });
+      } catch (err) {
+        processedResults.push({
+          success: false,
+          archivo: file.originalname,
+          error: 'No se pudo leer el archivo: ' + err.message
+        });
+      }
+    }
+
+    res.json({
+      total: processedResults.length,
+      resultados: processedResults
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error procesando los documentos: ' + error.message });
+  }
+});
+
+// Escaneo directo de una carpeta local en el ordenador
+app.post('/api/scan-folder', async (req, res) => {
+  try {
+    const { folderPath } = req.body;
+    if (!folderPath || !fs.existsSync(folderPath)) {
+      return res.status(400).json({ error: 'La ruta de la carpeta no existe o no es accesible' });
+    }
+
+    const files = fs.readdirSync(folderPath);
+    const validExtensions = ['.pdf', '.docx', '.doc', '.txt'];
+    const matchingFiles = files.filter(f => validExtensions.includes(path.extname(f).toLowerCase()));
+
+    if (matchingFiles.length === 0) {
+      return res.json({ total: 0, resultados: [], mensaje: 'No se encontraron archivos PDF o Word en la carpeta especificada' });
+    }
+
+    const processedResults = [];
+    for (const fileName of matchingFiles) {
+      const fullPath = path.join(folderPath, fileName);
+      try {
+        const buffer = fs.readFileSync(fullPath);
+        const mimetype = fileName.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        const extracted = await extractContentFromBuffer(buffer, mimetype, fileName);
+        const analysis = analyzeTextForMerits(extracted.text, fileName, extracted.html);
+        processedResults.push({
+          success: true,
+          archivo: fileName,
+          rutaCompleta: fullPath,
+          size: buffer.length,
+          ...analysis
+        });
+      } catch (err) {
+        processedResults.push({
+          success: false,
+          archivo: fileName,
+          error: 'Error al leer archivo: ' + err.message
+        });
+      }
+    }
+
+    res.json({
+      total: processedResults.length,
+      resultados: processedResults
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error escaneando la carpeta: ' + error.message });
+  }
+});
+
+// Cálculo del baremo individual
+app.post('/api/calculate', (req, res) => {
+  try {
+    const { candidateData, merits } = req.body;
+    if (!candidateData) {
+      return res.status(400).json({ error: 'Faltan los datos del candidato' });
+    }
+    const result = calculateScore(candidateData, merits || {});
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Error en el cálculo: ' + error.message });
+  }
+});
+
+// Exportación individual a Excel
+app.post('/api/export-excel', (req, res) => {
+  try {
+    const { candidateData, calculationResult } = req.body;
+    if (!candidateData || !calculationResult) {
+      return res.status(400).json({ error: 'Faltan datos para exportar a Excel' });
+    }
+
+    const buffer = buildExcelWorkbook(candidateData, calculationResult);
+    const filename = `Baremacion_${(candidateData.dni || 'Aspirante').replace(/[^a-zA-Z0-9]/g, '_')}_Cabildo.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al exportar Excel: ' + error.message });
+  }
+});
+
+const server = app.listen(PORT, () => {
+  console.log(`=======================================================`);
+  console.log(`  APLICACIÓN DE BAREMACIÓN Y ADJUDICACIÓN DE CONCURSO`);
+  console.log(`  Cabildo Insular de Tenerife / IASS`);
+  console.log(`  Servidor activo en: http://localhost:${PORT}`);
+  console.log(`=======================================================`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    const ALT_PORT = PORT + 1;
+    app.listen(ALT_PORT, () => {
+      console.log(`Puerto ${PORT} ocupado. Servidor iniciado en: http://localhost:${ALT_PORT}`);
+    });
+  } else {
+    console.error('Error al iniciar servidor:', err);
+  }
+});
