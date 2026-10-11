@@ -2959,6 +2959,14 @@ function cerrarModales() {
   if (mSim) mSim.style.display = 'none';
   const mTribunal = document.getElementById('modoTribunalOverlay');
   if (mTribunal) mTribunal.style.display = 'none';
+  const mNuevo = document.getElementById('modalNuevoPuesto');
+  if (mNuevo) mNuevo.style.display = 'none';
+  const mCurso = document.getElementById('modalCurso');
+  if (mCurso) mCurso.style.display = 'none';
+  const mExp = document.getElementById('modalExp');
+  if (mExp) mExp.style.display = 'none';
+  const mTexto = document.getElementById('modalTexto');
+  if (mTexto) mTexto.style.display = 'none';
 }
 
 function cerrarModalActa() {
@@ -3072,8 +3080,11 @@ async function incorporarPlazaLiberada(plazaJsonEncoded) {
 
 // Cerrar modales al pulsar la tecla Escape o al hacer clic fuera del contenido
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
+  if (e.key === 'Escape' || e.key === 'Esc') {
     cerrarModales();
+    if (typeof cerrarModoTribunal === 'function') {
+      cerrarModoTribunal();
+    }
   }
 });
 
@@ -3827,7 +3838,12 @@ function abrirModalConfigActa() {
   }
 
   const modal = document.getElementById('modalConfigActa');
-  if (modal) modal.style.display = 'flex';
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.scrollTop = 0;
+    const mb = modal.querySelector('.modal-body');
+    if (mb) mb.scrollTop = 0;
+  }
 }
 
 // Ejecutar Descarga del Acta Oficial en Word (.doc)
@@ -4105,7 +4121,13 @@ async function abrirModalComparador() {
     }
   }
 
-  document.getElementById('modalComparadorDesempate').style.display = 'flex';
+  const mComp = document.getElementById('modalComparadorDesempate');
+  if (mComp) {
+    mComp.style.display = 'flex';
+    mComp.scrollTop = 0;
+    const mb = mComp.querySelector('.modal-body');
+    if (mb) mb.scrollTop = 0;
+  }
   ejecutarComparativaDesempate();
 }
 
@@ -4381,7 +4403,13 @@ async function abrirModalSimulador() {
   }
 
   resetearValoresSimulador();
-  document.getElementById('modalSimuladorAlegaciones').style.display = 'flex';
+  const mSim = document.getElementById('modalSimuladorAlegaciones');
+  if (mSim) {
+    mSim.style.display = 'flex';
+    mSim.scrollTop = 0;
+    const mb = mSim.querySelector('.modal-body');
+    if (mb) mb.scrollTop = 0;
+  }
   cargarDatosSimuladorAspirante();
 }
 
@@ -4775,11 +4803,6 @@ async function renderizarModoTribunal() {
   });
 }
 
-// Tecla Escape para salir del Modo Tribunal
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    cerrarModoTribunal();
-  }
-});
+
 
 
