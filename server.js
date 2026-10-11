@@ -26,6 +26,9 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Health check para Render y monitorización
+app.get('/health', (req, res) => res.status(200).send('OK'));
+
 // Multer storage en memoria para no dejar residuos en disco
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -497,11 +500,12 @@ app.post('/api/export-excel', (req, res) => {
   }
 });
 
-const server = app.listen(PORT, () => {
+const HOST = '0.0.0.0';
+const server = app.listen(PORT, HOST, () => {
   console.log(`=======================================================`);
   console.log(`  APLICACIÓN DE BAREMACIÓN Y ADJUDICACIÓN DE CONCURSO`);
   console.log(`  Cabildo Insular de Tenerife / IASS`);
-  console.log(`  Servidor activo en: http://localhost:${PORT}`);
+  console.log(`  Servidor activo en: http://${HOST}:${PORT}`);
   console.log(`=======================================================`);
 });
 
