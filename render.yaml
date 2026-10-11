@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: concurso-auxiliaresv3
+    runtime: node
+    plan: free
+    buildCommand: yarn
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
