@@ -40,12 +40,20 @@ body {
 }
 
 .header-container {
-  max-width: 1400px;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1.5rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.header-left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
 .header-branding {
@@ -57,29 +65,64 @@ body {
 .logo-shield {
   background: linear-gradient(135deg, #1e3a8a, #2563eb);
   color: white;
-  width: 46px;
-  height: 46px;
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 4px rgba(30, 58, 138, 0.2);
+  flex-shrink: 0;
 }
 
 .header-branding h1 {
-  font-size: 1.25rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: #0f172a;
+  margin: 0;
+  line-height: 1.25;
 }
 
 .subtitle {
-  font-size: 0.825rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
+  margin: 0;
+  line-height: 1.35;
+}
+
+.tribunal-tools-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin-left: 60px;
+}
+
+.header-right-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
 }
 
 .header-actions {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 992px) {
+  .tribunal-tools-bar {
+    margin-left: 0;
+  }
+  .header-right-col {
+    align-items: flex-start;
+    width: 100%;
+  }
+  .header-container {
+    padding: 0.6rem 1rem;
+  }
 }
 
 /* Navegación Principal */
