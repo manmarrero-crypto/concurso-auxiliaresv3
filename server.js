@@ -10,6 +10,14 @@ const { buildExcelWorkbook, buildRankingExcelWorkbook, buildAnonimizedRankingExc
 const { buildActaWordDocument, buildNotificacionIndividualWordDocument } = require('./services/wordExporter');
 const { getAllAspirantes, saveAspirante, deleteAspirante } = require('./data/storage');
 const { computeRankingForPuesto, computeGlobalStatistics } = require('./services/adjudicationService');
+const { 
+  parseExcelImport, 
+  parseWordImport, 
+  parsePdfImport, 
+  generateCandidateDiff, 
+  mergeAspiranteDeOficio, 
+  generateExcelTemplate 
+} = require('./services/bulkImportService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -589,6 +597,166 @@ app.get('/api/backup', (req, res) => {
     res.send(JSON.stringify(backupData, null, 2));
   } catch (error) {
     res.status(500).json({ error: 'Error al generar copia de seguridad: ' + error.message });
+  }
+});
+
+// ==========================================
+// RUTAS DE IMPORTACIÓN MASIVA Y DE OFICIO
+// ==========================================
+
+// Descargar Plantilla Oficial Excel para Importación Masiva
+app.get('/api/import/template', (req, res) => {
+  try {
+    const puestosPath = path.join(__dirname, 'data', 'puestos.json');
+    const puestosCatalogo = JSON.parse(fs.readFileSync(puestosPath, 'utf8'));
+    const buffer = generateExcelTemplate(puestosCatalogo);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Plantilla_Importacion_Concurso_Auxiliares.xlsx"');
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al generar la plantilla: ' + error.message });
+  }
+});
+
+// Analizar archivo subido (Excel, Word, PDF) y previsualizar cambios / conflictos pormenorizados
+app.post('/api/import/preview', upload.single('archivo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se ha subido ningún archivo' });
+    }
+
+    const puestosPath = path.join(__dirname, 'data', 'puestos.json');
+    const puestosCatalogo = JSON.parse(fs.readFileSync(puestosPath, 'utf8'));
+    const filename = req.file.originalname || 'documento';
+    const ext = path.extname(filename).toLowerCase();
+
+    let parseResult;
+    if (ext === '.xlsx' || ext === '.xls' || ext === '.csv') {
+      parseResult = parseExcelImport(req.file.buffer, puestosCatalogo);
+    } else if (ext === '.docx' || ext === '.doc') {
+      parseResult = await parseWordImport(req.file.buffer, puestosCatalogo);
+    } else if (ext === '.pdf') {
+      parseResult = await parsePdfImport(req.file.buffer, puestosCatalogo);
+    } else {
+      return res.status(400).json({ error: 'Formato no soportado. Sube un archivo Excel (.xlsx, .xls, .csv), Word (.docx, .doc) o PDF (.pdf)' });
+    }
+
+    const candidatosDetectados = parseResult.candidatos || [];
+    if (candidatosDetectados.length === 0) {
+      return res.json({
+        success: false,
+        mensaje: 'No se detectaron aspirantes ni registros válidos en el documento proporcionado.',
+        totalDetectados: 0,
+        candidatosNuevos: [],
+        candidatosExistentes: []
+      });
+    }
+
+    const listaExistentes = getAllAspirantes();
+    const nuevos = [];
+    const existentes = [];
+
+    for (const cand of candidatosDetectados) {
+      // Calcular puntuación provisional si tiene puesto
+      if (cand.puestoSolicitado) {
+        try {
+          cand.resultadoCalculo = calculateScore(cand, cand.merits || {});
+        } catch (e) {}
+      }
+
+      const matchExistente = listaExistentes.find(a => 
+        (a.dni && a.dni.toUpperCase() === cand.dni.toUpperCase()) ||
+        (a.id && a.id.toUpperCase() === cand.id.toUpperCase())
+      );
+
+      if (matchExistente) {
+        const diff = generateCandidateDiff(matchExistente, cand);
+        existentes.push({
+          aspiranteImportado: cand,
+          aspiranteActual: matchExistente,
+          diff
+        });
+      } else {
+        nuevos.push(cand);
+      }
+    }
+
+    res.json({
+      success: true,
+      archivo: filename,
+      totalDetectados: candidatosDetectados.length,
+      totalNuevos: nuevos.length,
+      totalExistentes: existentes.length,
+      totalConConflicto: existentes.filter(e => e.diff.hasConflicts).length,
+      candidatosNuevos: nuevos,
+      candidatosExistentes: existentes,
+      totalCursosOficio: parseResult.totalCursosOficio || 0,
+      totalExperienciaOficio: parseResult.totalExperienciaOficio || 0
+    });
+  } catch (error) {
+    console.error('Error en previsualización de importación:', error);
+    res.status(500).json({ error: 'Error al analizar el archivo: ' + error.message });
+  }
+});
+
+// Confirmar y aplicar la importación masiva con las resoluciones pormenorizadas
+app.post('/api/import/confirm', (req, res) => {
+  try {
+    const { candidatosNuevos = [], resolucionesExistentes = [] } = req.body;
+    let guardadosNuevos = 0;
+    let actualizados = 0;
+    let omitidos = 0;
+
+    // 1. Guardar candidatos completamente nuevos
+    for (const nuevo of candidatosNuevos) {
+      if (nuevo.puestoSolicitado) {
+        try {
+          nuevo.resultadoCalculo = calculateScore(nuevo, nuevo.merits || {});
+        } catch (e) {}
+      }
+      saveAspirante(nuevo);
+      guardadosNuevos++;
+    }
+
+    // 2. Procesar resoluciones para candidatos existentes
+    const listaExistentes = getAllAspirantes();
+    for (const resItem of resolucionesExistentes) {
+      const { dni, accion, aspiranteImportado } = resItem;
+      const actual = listaExistentes.find(a => a.dni && a.dni.toUpperCase() === (dni || '').toUpperCase());
+
+      if (!actual) continue;
+
+      if (accion === 'sobrescribir') {
+        const aGuardar = { ...aspiranteImportado, id: actual.id, dni: actual.dni };
+        if (aGuardar.puestoSolicitado) {
+          try {
+            aGuardar.resultadoCalculo = calculateScore(aGuardar, aGuardar.merits || {});
+          } catch (e) {}
+        }
+        saveAspirante(aGuardar);
+        actualizados++;
+      } else if (accion === 'fusionar_oficio') {
+        const fusionado = mergeAspiranteDeOficio(actual, aspiranteImportado);
+        saveAspirante(fusionado);
+        actualizados++;
+      } else if (accion === 'omitir') {
+        omitidos++;
+      }
+    }
+
+    const totalActual = getAllAspirantes().length;
+    res.json({
+      success: true,
+      guardadosNuevos,
+      actualizados,
+      omitidos,
+      totalActual,
+      mensaje: `Importación completada con éxito: ${guardadosNuevos} creados, ${actualizados} actualizados, ${omitidos} omitidos.`
+    });
+  } catch (error) {
+    console.error('Error al confirmar importación:', error);
+    res.status(500).json({ error: 'Error al confirmar importación: ' + error.message });
   }
 });
 
