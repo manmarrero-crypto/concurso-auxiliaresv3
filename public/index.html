@@ -1485,34 +1485,44 @@
 
   <!-- Modal Importación Masiva y Suministro de Oficio (Excel, Word, PDF) -->
   <div id="modalImportacionMasiva" class="modal" style="display:none;">
-    <div class="modal-content" style="max-width: 960px;">
+    <div class="modal-content" style="max-width: 980px;">
       <div class="modal-header" style="background:#b45309; color:#ffffff;">
         <h3 style="color:#ffffff; margin:0; font-size:1.15rem; display:flex; align-items:center; gap:8px;">
-          <span>📥</span> Importación Masiva de Aspirantes y Méritos de Oficio
+          <span>📥</span> Importación Masiva (Candidatos y Méritos de Oficio)
         </h3>
         <button class="close-btn" onclick="document.getElementById('modalImportacionMasiva').style.display='none'; cerrarModales();" style="color:#ffffff; cursor:pointer;" title="Cerrar">&times;</button>
       </div>
 
       <div class="modal-body" style="padding:1.25rem;">
         
-        <!-- Pestaña / Encabezado Informativo -->
-        <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:12px 16px; margin-bottom:14px; font-size:0.825rem; color:#92400e; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-          <div style="flex:1; min-width:280px;">
-            <strong>✨ Creación en Bloque y Carga de Oficio:</strong> Suministra todos los candidatos de golpe (datos personales y orden de plazas pedidas) o carga la formación y tiempo trabajado en Cabildo de oficio mediante archivos <strong>Excel (.xlsx, .xls), Word (.docx) o PDF (.pdf)</strong>.
+        <!-- Pestañas de Selección: Candidatos vs Méritos de Oficio -->
+        <div style="display:flex; border-bottom:2px solid #e2e8f0; margin-bottom:14px; gap:8px;">
+          <button type="button" id="tabImportCandidatos" onclick="cambiarPestanaImportacion('candidatos')" style="padding:10px 18px; font-weight:700; font-size:0.9rem; border:none; background:none; cursor:pointer; border-bottom:3px solid #b45309; color:#b45309; display:flex; align-items:center; gap:8px;">
+            <span>👤</span> 1. Ingesta de Candidatos y Solicitudes
+          </button>
+          <button type="button" id="tabImportMeritos" onclick="cambiarPestanaImportacion('meritos')" style="padding:10px 18px; font-weight:600; font-size:0.9rem; border:none; background:none; cursor:pointer; border-bottom:3px solid transparent; color:#64748b; display:flex; align-items:center; gap:8px;">
+            <span>📜</span> 2. Méritos de Oficio (Formación y Tiempo Cabildo)
+          </button>
+        </div>
+
+        <!-- Banner Informativo Dinámico -->
+        <div id="bannerInfoImportacion" style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:12px 16px; margin-bottom:14px; font-size:0.825rem; color:#92400e; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div id="textoBannerImportacion" style="flex:1; min-width:280px;">
+            <strong>👤 Ingesta de Candidatos y Solicitudes:</strong> Suministra todos los participantes de golpe a partir de un listado <strong>Excel, Word o PDF</strong> con sus datos personales, situación administrativa, grado personal, conciliación y los puestos que solicitan en orden de prelación. Si un aspirante ya existe en el censo, te avisará con el detalle pormenorizado para elegir si actualizar su solicitud o no.
           </div>
-          <button type="button" class="btn btn-sm btn-outline" onclick="descargarPlantillaExcel()" style="background:#ffffff; border-color:#d97706; color:#b45309; font-weight:700; white-space:nowrap;">
-            📄 Descargar Plantilla Excel (.xlsx)
+          <button type="button" id="btnDescargaPlantillaActiva" class="btn btn-sm btn-outline" onclick="descargarPlantillaExcel()" style="background:#ffffff; border-color:#d97706; color:#b45309; font-weight:700; white-space:nowrap;">
+            📄 Descargar Plantilla (.xlsx)
           </button>
         </div>
 
         <!-- Zona de Carga de Archivo (Dropzone) -->
         <div id="zonaSubidaImportacion" style="border:2px dashed #cbd5e1; border-radius:10px; padding:24px 16px; text-align:center; background:#f8fafc; transition:all 0.2s ease; margin-bottom:16px;">
           <input type="file" id="inputArchivoImportacion" accept=".xlsx,.xls,.csv,.docx,.doc,.pdf" style="display:none;" onchange="procesarArchivoSeleccionado(event)">
-          <div style="font-size:2.4rem; margin-bottom:6px;">📁</div>
-          <div style="font-weight:700; color:#1e293b; font-size:0.95rem; margin-bottom:4px;">
-            Arrastra tu archivo aquí o haz clic para examinar
+          <div id="iconoDropzoneImport" style="font-size:2.4rem; margin-bottom:6px;">📁</div>
+          <div id="tituloDropzoneImport" style="font-weight:700; color:#1e293b; font-size:0.95rem; margin-bottom:4px;">
+            Arrastra el archivo de Candidatos aquí o haz clic para examinar
           </div>
-          <div style="font-size:0.75rem; color:#64748b; margin-bottom:14px;">
+          <div id="subtituloDropzoneImport" style="font-size:0.75rem; color:#64748b; margin-bottom:14px;">
             Formatos admitidos: Libros Excel (.xlsx, .xls, .csv), Documentos Word (.docx, .doc), o Listados PDF (.pdf)
           </div>
           <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
@@ -1526,48 +1536,26 @@
         <!-- Spinner de análisis -->
         <div id="spinnerImportacion" style="display:none; text-align:center; padding:24px;">
           <div class="spinner" style="margin:0 auto 10px auto; width:36px; height:36px; border:4px solid #f3f3f3; border-top:4px solid #d97706; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
-          <div style="font-weight:700; color:#475569;">Analizando estructura del documento y cotejando con los datos existentes...</div>
+          <div id="textoSpinnerImport" style="font-weight:700; color:#475569;">Analizando estructura del documento y cotejando con los datos existentes...</div>
         </div>
 
         <!-- Vista Previa de Resultados (Oculta al inicio) -->
         <div id="panelVistaPreviaImportacion" style="display:none;">
 
           <!-- KPIs Resumen del Análisis -->
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; margin-bottom:16px;">
-            <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px 14px;">
-              <div style="font-size:0.75rem; font-weight:700; color:#166534; text-transform:uppercase;">Nuevos Aspirantes</div>
-              <div id="kpiNuevosImport" style="font-size:1.6rem; font-weight:800; color:#15803d;">0</div>
-              <div style="font-size:0.7rem; color:#166534;">Se crearán de golpe en el concurso</div>
-            </div>
-            <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 14px;">
-              <div style="font-size:0.75rem; font-weight:700; color:#92400e; text-transform:uppercase;">Ya Existentes (Conflictos)</div>
-              <div id="kpiConflictosImport" style="font-size:1.6rem; font-weight:800; color:#b45309;">0</div>
-              <div style="font-size:0.7rem; color:#92400e;">Requieren decisión pormenorizada</div>
-            </div>
-            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:10px 14px;">
-              <div style="font-size:0.75rem; font-weight:700; color:#1e40af; text-transform:uppercase;">Méritos De Oficio</div>
-              <div id="kpiOficioImport" style="font-size:1.6rem; font-weight:800; color:#2563eb;">0</div>
-              <div style="font-size:0.7rem; color:#1e40af;">Cursos y períodos Cabildo detectados</div>
-            </div>
+          <div id="contenedorKpisImport" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; margin-bottom:16px;">
+            <!-- Renderizado dinámico de KPIs -->
           </div>
 
-          <!-- SECCIÓN: CONFLICTOS / ASPIRANTES EXISTENTES (CON DIFF PORMENORIZADO) -->
+          <!-- SECCIÓN DE DETALLE / CONFLICTOS PORMENORIZADOS -->
           <div id="bloqueConflictosAspirantes" style="margin-bottom:18px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
-              <div style="font-size:0.95rem; font-weight:800; color:#b45309; display:flex; align-items:center; gap:6px;">
-                <span>⚠️</span> Aspirantes Ya Registrados: Aviso de Sobrescritura y Diferencias Pormenorizadas
+              <div id="tituloBloqueConflictos" style="font-size:0.95rem; font-weight:800; color:#b45309; display:flex; align-items:center; gap:6px;">
+                <span>⚠️</span> Aspirantes Detectados: Desglose Pormenorizado y Acciones
               </div>
-              <!-- Acciones masivas para existentes -->
-              <div style="display:flex; gap:6px; font-size:0.75rem;">
-                <button type="button" class="btn btn-xs btn-outline" onclick="aplicarResolucionGlobal('fusionar_oficio')" style="color:#0369a1; border-color:#0284c7; font-weight:700; background:#f0f9ff;">
-                  🟢 Fusionar De Oficio a Todos
-                </button>
-                <button type="button" class="btn btn-xs btn-outline" onclick="aplicarResolucionGlobal('sobrescribir')" style="color:#b45309; border-color:#f59e0b; background:#fffbeb;">
-                  🟡 Sobrescribir Todos
-                </button>
-                <button type="button" class="btn btn-xs btn-outline" onclick="aplicarResolucionGlobal('omitir')" style="color:#475569; border-color:#cbd5e1; background:#f8fafc;">
-                  ⚪ Omitir Todos
-                </button>
+              <!-- Acciones masivas -->
+              <div id="botonesAccionMasiva" style="display:flex; gap:6px; font-size:0.75rem;">
+                <!-- Botones masivos inyectados dinámicamente -->
               </div>
             </div>
 
@@ -1576,8 +1564,8 @@
             </div>
           </div>
 
-          <!-- SECCIÓN: NUEVOS ASPIRANTES A CREAR -->
-          <div id="bloqueNuevosAspirantes" style="margin-bottom:14px;">
+          <!-- SECCIÓN: NUEVOS ASPIRANTES A CREAR (Solo para modo candidatos) -->
+          <div id="bloqueNuevosAspirantes" style="margin-bottom:14px; display:none;">
             <div style="font-size:0.95rem; font-weight:800; color:#15803d; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
               <span>✅</span> Nuevos Aspirantes Listos para Crear de Golpe (<span id="countBadgeNuevos">0</span>)
             </div>
@@ -1589,7 +1577,7 @@
                     <th style="width:30%;">Nombre y Apellidos</th>
                     <th style="width:15%;">Situación</th>
                     <th style="width:25%;">Puestos Solicitados</th>
-                    <th style="width:15%; text-align:right;">Méritos Detectados</th>
+                    <th style="width:15%; text-align:right;">Grado / Conciliación</th>
                   </tr>
                 </thead>
                 <tbody id="tbodyNuevosImport"></tbody>
@@ -1604,7 +1592,7 @@
       <div class="modal-footer" style="background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
         <button type="button" class="btn btn-outline" onclick="document.getElementById('modalImportacionMasiva').style.display='none'; cerrarModales();">Cancelar</button>
         <button type="button" id="btnEjecutarImportacionFinal" class="btn btn-primary" onclick="ejecutarImportacionConfirmada()" style="display:none; background:#d97706; border-color:#d97706; font-weight:800; padding:8px 20px; font-size:0.9rem;">
-          🚀 Aplicar e Importar Candidatos al Concurso
+          🚀 Aplicar e Importar al Concurso
         </button>
       </div>
     </div>

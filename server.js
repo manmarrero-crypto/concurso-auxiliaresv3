@@ -11,12 +11,22 @@ const { buildActaWordDocument, buildNotificacionIndividualWordDocument } = requi
 const { getAllAspirantes, saveAspirante, deleteAspirante } = require('./data/storage');
 const { computeRankingForPuesto, computeGlobalStatistics } = require('./services/adjudicationService');
 const { 
-  parseExcelImport, 
-  parseWordImport, 
-  parsePdfImport, 
-  generateCandidateDiff, 
-  mergeAspiranteDeOficio, 
-  generateExcelTemplate 
+  normalizarDni,
+  parseExcelCandidatos,
+  parseWordCandidatos,
+  parsePdfCandidatos,
+  parseExcelMeritos,
+  parseWordMeritos,
+  parsePdfMeritos,
+  generateCandidateDiff,
+  generateMeritsDiff,
+  mergeCandidateSolicitud,
+  mergeMeritsDeOficio,
+  overwriteMeritsDeOficio,
+  mergeAspiranteDeOficio,
+  generateTemplateCandidatos,
+  generateTemplateMeritos,
+  generateExcelTemplate
 } = require('./services/bulkImportService');
 
 const app = express();
@@ -604,15 +614,25 @@ app.get('/api/backup', (req, res) => {
 // RUTAS DE IMPORTACIÓN MASIVA Y DE OFICIO
 // ==========================================
 
-// Descargar Plantilla Oficial Excel para Importación Masiva
+// Descargar Plantilla Oficial Excel para Importación Masiva (por tipo: candidatos o meritos)
 app.get('/api/import/template', (req, res) => {
   try {
+    const tipo = req.query.tipo || 'candidatos';
     const puestosPath = path.join(__dirname, 'data', 'puestos.json');
     const puestosCatalogo = JSON.parse(fs.readFileSync(puestosPath, 'utf8'));
-    const buffer = generateExcelTemplate(puestosCatalogo);
+
+    let buffer;
+    let filename;
+    if (tipo === 'meritos') {
+      buffer = generateTemplateMeritos();
+      filename = 'Plantilla_Meritos_De_Oficio_Cabildo.xlsx';
+    } else {
+      buffer = generateTemplateCandidatos(puestosCatalogo);
+      filename = 'Plantilla_Candidatos_y_Solicitudes.xlsx';
+    }
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="Plantilla_Importacion_Concurso_Auxiliares.xlsx"');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(buffer);
   } catch (error) {
     res.status(500).json({ error: 'Error al generar la plantilla: ' + error.message });
@@ -626,74 +646,156 @@ app.post('/api/import/preview', upload.single('archivo'), async (req, res) => {
       return res.status(400).json({ error: 'No se ha subido ningún archivo' });
     }
 
+    const tipoImportacion = req.body.tipoImportacion || req.query.tipo || 'candidatos';
     const puestosPath = path.join(__dirname, 'data', 'puestos.json');
     const puestosCatalogo = JSON.parse(fs.readFileSync(puestosPath, 'utf8'));
     const filename = req.file.originalname || 'documento';
     const ext = path.extname(filename).toLowerCase();
+    const listaExistentes = getAllAspirantes();
 
-    let parseResult;
-    if (ext === '.xlsx' || ext === '.xls' || ext === '.csv') {
-      parseResult = parseExcelImport(req.file.buffer, puestosCatalogo);
-    } else if (ext === '.docx' || ext === '.doc') {
-      parseResult = await parseWordImport(req.file.buffer, puestosCatalogo);
-    } else if (ext === '.pdf') {
-      parseResult = await parsePdfImport(req.file.buffer, puestosCatalogo);
-    } else {
-      return res.status(400).json({ error: 'Formato no soportado. Sube un archivo Excel (.xlsx, .xls, .csv), Word (.docx, .doc) o PDF (.pdf)' });
-    }
+    // ============================================
+    // MODO 1: IMPORTACIÓN DE CANDIDATOS Y SOLICITUDES
+    // ============================================
+    if (tipoImportacion === 'candidatos') {
+      let parseResult;
+      if (ext === '.xlsx' || ext === '.xls' || ext === '.csv') {
+        parseResult = parseExcelCandidatos(req.file.buffer, puestosCatalogo);
+      } else if (ext === '.docx' || ext === '.doc') {
+        parseResult = await parseWordCandidatos(req.file.buffer, puestosCatalogo);
+      } else if (ext === '.pdf') {
+        parseResult = await parsePdfCandidatos(req.file.buffer, puestosCatalogo);
+      } else {
+        return res.status(400).json({ error: 'Formato no soportado. Sube un archivo Excel (.xlsx, .xls, .csv), Word (.docx, .doc) o PDF (.pdf)' });
+      }
 
-    const candidatosDetectados = parseResult.candidatos || [];
-    if (candidatosDetectados.length === 0) {
+      const candidatosDetectados = parseResult.candidatos || [];
+      if (candidatosDetectados.length === 0) {
+        return res.json({
+          success: false,
+          tipo: 'candidatos',
+          mensaje: 'No se detectaron aspirantes ni solicitudes válidas en el documento.',
+          candidatosNuevos: [],
+          candidatosExistentes: []
+        });
+      }
+
+      const nuevos = [];
+      const existentes = [];
+
+      for (const cand of candidatosDetectados) {
+        const matchExistente = listaExistentes.find(a => 
+          normalizarDni(a.dni) === normalizarDni(cand.dni) ||
+          (a.id && a.id.toUpperCase() === cand.id.toUpperCase())
+        );
+
+        if (matchExistente) {
+          const diff = generateCandidateDiff(matchExistente, cand);
+          existentes.push({
+            aspiranteImportado: cand,
+            aspiranteActual: matchExistente,
+            diff
+          });
+        } else {
+          nuevos.push(cand);
+        }
+      }
+
       return res.json({
-        success: false,
-        mensaje: 'No se detectaron aspirantes ni registros válidos en el documento proporcionado.',
-        totalDetectados: 0,
-        candidatosNuevos: [],
-        candidatosExistentes: []
+        success: true,
+        tipo: 'candidatos',
+        archivo: filename,
+        totalDetectados: candidatosDetectados.length,
+        totalNuevos: nuevos.length,
+        totalExistentes: existentes.length,
+        totalConConflicto: existentes.filter(e => e.diff.hasConflicts).length,
+        candidatosNuevos: nuevos,
+        candidatosExistentes: existentes
       });
     }
 
-    const listaExistentes = getAllAspirantes();
-    const nuevos = [];
-    const existentes = [];
-
-    for (const cand of candidatosDetectados) {
-      // Calcular puntuación provisional si tiene puesto
-      if (cand.puestoSolicitado) {
-        try {
-          cand.resultadoCalculo = calculateScore(cand, cand.merits || {});
-        } catch (e) {}
-      }
-
-      const matchExistente = listaExistentes.find(a => 
-        (a.dni && a.dni.toUpperCase() === cand.dni.toUpperCase()) ||
-        (a.id && a.id.toUpperCase() === cand.id.toUpperCase())
-      );
-
-      if (matchExistente) {
-        const diff = generateCandidateDiff(matchExistente, cand);
-        existentes.push({
-          aspiranteImportado: cand,
-          aspiranteActual: matchExistente,
-          diff
-        });
+    // ============================================
+    // MODO 2: IMPORTACIÓN DE MÉRITOS DE OFICIO (FORMACIÓN Y TIEMPO CABILDO)
+    // ============================================
+    else if (tipoImportacion === 'meritos') {
+      let parseResult;
+      if (ext === '.xlsx' || ext === '.xls' || ext === '.csv') {
+        parseResult = parseExcelMeritos(req.file.buffer);
+      } else if (ext === '.docx' || ext === '.doc') {
+        parseResult = await parseWordMeritos(req.file.buffer);
+      } else if (ext === '.pdf') {
+        parseResult = await parsePdfMeritos(req.file.buffer);
       } else {
-        nuevos.push(cand);
+        return res.status(400).json({ error: 'Formato no soportado. Sube un archivo Excel (.xlsx, .xls, .csv), Word (.docx, .doc) o PDF (.pdf)' });
       }
-    }
 
-    res.json({
-      success: true,
-      archivo: filename,
-      totalDetectados: candidatosDetectados.length,
-      totalNuevos: nuevos.length,
-      totalExistentes: existentes.length,
-      totalConConflicto: existentes.filter(e => e.diff.hasConflicts).length,
-      candidatosNuevos: nuevos,
-      candidatosExistentes: existentes,
-      totalCursosOficio: parseResult.totalCursosOficio || 0,
-      totalExperienciaOficio: parseResult.totalExperienciaOficio || 0
-    });
+      const meritosPorDni = parseResult.meritosPorDni || {};
+      const listaDnis = Object.keys(meritosPorDni);
+
+      if (listaDnis.length === 0) {
+        return res.json({
+          success: false,
+          tipo: 'meritos',
+          mensaje: 'No se detectaron cursos de formación ni tiempo trabajado con DNI en el documento.',
+          totalAspirantes: 0,
+          detalles: []
+        });
+      }
+
+      const detalles = [];
+      for (const dni of listaDnis) {
+        const datosM = meritosPorDni[dni];
+        const matchExistente = listaExistentes.find(a => normalizarDni(a.dni) === normalizarDni(dni));
+
+        if (matchExistente) {
+          const diff = generateMeritsDiff(matchExistente, datosM);
+          detalles.push({
+            dni,
+            nombre: matchExistente.nombre,
+            registradoEnConcurso: true,
+            aspiranteActual: matchExistente,
+            meritosNuevos: datosM,
+            diff
+          });
+        } else {
+          detalles.push({
+            dni,
+            nombre: datosM.nombreAspirante || ('Aspirante ' + dni),
+            registradoEnConcurso: false,
+            aspiranteActual: null,
+            meritosNuevos: datosM,
+            diff: {
+              hasConflicts: false,
+              totalCambios: datosM.cursos.length + datosM.experiencia.length,
+              esNuevo: true,
+              cambios: [
+                { campo: 'Estado en el Concurso', anterior: 'No figura en la lista de solicitudes', nuevo: 'Se creará ficha base con estos méritos', tipo: 'nuevo' },
+                { campo: 'Cursos Formación', anterior: '0 cursos', nuevo: `+${datosM.cursos.length} cursos`, detalleItems: datosM.cursos.map(c => `• ${c.titulo} (${c.horas}h)`), tipo: 'anadido' },
+                { campo: 'Servicios Cabildo', anterior: '0 días', nuevo: `+${datosM.experiencia.reduce((acc, e) => acc + (e.dias || 0), 0)} días`, detalleItems: datosM.experiencia.map(e => `• ${e.puesto} (${e.dias} días)`), tipo: 'anadido' }
+              ],
+              cursosParaAnadir: datosM.cursos,
+              expParaAnadir: datosM.experiencia,
+              horasNuevas: datosM.cursos.reduce((acc, c) => acc + (c.horas || 0), 0),
+              diasNuevos: datosM.experiencia.reduce((acc, e) => acc + (e.dias || 0), 0)
+            }
+          });
+        }
+      }
+
+      return res.json({
+        success: true,
+        tipo: 'meritos',
+        archivo: filename,
+        totalAspirantes: listaDnis.length,
+        totalCursos: parseResult.totalCursos,
+        totalServicios: parseResult.totalServicios,
+        totalExistentes: detalles.filter(d => d.registradoEnConcurso).length,
+        totalNoRegistrados: detalles.filter(d => !d.registradoEnConcurso).length,
+        totalConCambios: detalles.filter(d => d.diff.hasConflicts || d.diff.esNuevo).length,
+        detalles
+      });
+    } else {
+      return res.status(400).json({ error: 'Tipo de importación no válido. Debe ser "candidatos" o "meritos".' });
+    }
   } catch (error) {
     console.error('Error en previsualización de importación:', error);
     res.status(500).json({ error: 'Error al analizar el archivo: ' + error.message });
@@ -703,56 +805,115 @@ app.post('/api/import/preview', upload.single('archivo'), async (req, res) => {
 // Confirmar y aplicar la importación masiva con las resoluciones pormenorizadas
 app.post('/api/import/confirm', (req, res) => {
   try {
-    const { candidatosNuevos = [], resolucionesExistentes = [] } = req.body;
+    const { 
+      tipoImportacion = 'candidatos', 
+      candidatosNuevos = [], 
+      resolucionesExistentes = [], 
+      resolucionesMeritos = [] 
+    } = req.body;
+
     let guardadosNuevos = 0;
     let actualizados = 0;
     let omitidos = 0;
 
-    // 1. Guardar candidatos completamente nuevos
-    for (const nuevo of candidatosNuevos) {
-      if (nuevo.puestoSolicitado) {
-        try {
-          nuevo.resultadoCalculo = calculateScore(nuevo, nuevo.merits || {});
-        } catch (e) {}
-      }
-      saveAspirante(nuevo);
-      guardadosNuevos++;
-    }
+    const puestosPath = path.join(__dirname, 'data', 'puestos.json');
+    const puestosCatalogo = JSON.parse(fs.readFileSync(puestosPath, 'utf8'));
 
-    // 2. Procesar resoluciones para candidatos existentes
-    const listaExistentes = getAllAspirantes();
-    for (const resItem of resolucionesExistentes) {
-      const { dni, accion, aspiranteImportado } = resItem;
-      const actual = listaExistentes.find(a => a.dni && a.dni.toUpperCase() === (dni || '').toUpperCase());
-
-      if (!actual) continue;
-
-      if (accion === 'sobrescribir') {
-        const aGuardar = { ...aspiranteImportado, id: actual.id, dni: actual.dni };
-        if (aGuardar.puestoSolicitado) {
+    // ============================================
+    // CONFIRMAR CANDIDATOS Y SOLICITUDES
+    // ============================================
+    if (tipoImportacion === 'candidatos') {
+      // 1. Guardar candidatos completamente nuevos
+      for (const nuevo of candidatosNuevos) {
+        if (nuevo.puestoSolicitado) {
           try {
-            aGuardar.resultadoCalculo = calculateScore(aGuardar, aGuardar.merits || {});
+            nuevo.resultadoCalculo = calculateScore(nuevo, nuevo.merits || {});
           } catch (e) {}
         }
-        saveAspirante(aGuardar);
-        actualizados++;
-      } else if (accion === 'fusionar_oficio') {
-        const fusionado = mergeAspiranteDeOficio(actual, aspiranteImportado);
-        saveAspirante(fusionado);
-        actualizados++;
-      } else if (accion === 'omitir') {
-        omitidos++;
+        saveAspirante(nuevo);
+        guardadosNuevos++;
+      }
+
+      // 2. Procesar resoluciones para candidatos existentes
+      const listaExistentes = getAllAspirantes();
+      for (const resItem of resolucionesExistentes) {
+        const { dni, accion, aspiranteImportado } = resItem;
+        const actual = listaExistentes.find(a => normalizarDni(a.dni) === normalizarDni(dni));
+        if (!actual) continue;
+
+        if (accion === 'sobrescribir' || accion === 'actualizar') {
+          // Actualizar datos de solicitud conservando méritos
+          const actualizado = mergeCandidateSolicitud(actual, aspiranteImportado);
+          saveAspirante(actualizado);
+          actualizados++;
+        } else if (accion === 'omitir') {
+          omitidos++;
+        }
+      }
+    }
+
+    // ============================================
+    // CONFIRMAR MÉRITOS DE OFICIO (FORMACIÓN Y SERVICIOS)
+    // ============================================
+    else if (tipoImportacion === 'meritos') {
+      const listaExistentes = getAllAspirantes();
+
+      for (const resItem of resolucionesMeritos) {
+        const { dni, accion, meritosNuevos, nombre } = resItem;
+        const actual = listaExistentes.find(a => normalizarDni(a.dni) === normalizarDni(dni));
+
+        if (actual) {
+          if (accion === 'fusionar' || accion === 'fusionar_oficio') {
+            const fusionado = mergeMeritsDeOficio(actual, meritosNuevos);
+            saveAspirante(fusionado);
+            actualizados++;
+          } else if (accion === 'sobrescribir') {
+            const sobrescrito = overwriteMeritsDeOficio(actual, meritosNuevos);
+            saveAspirante(sobrescrito);
+            actualizados++;
+          } else if (accion === 'omitir') {
+            omitidos++;
+          }
+        } else {
+          // Aspirante que no estaba registrado previamente
+          if (accion !== 'omitir') {
+            const nuevo = {
+              id: dni,
+              dni,
+              nombre: nombre || ('Aspirante ' + dni),
+              situacionAdministrativa: 'definitiva',
+              puestoOrigen: '',
+              participaResultas: true,
+              soloResultas: false,
+              renunciaResultas: false,
+              gradoPersonal: '16',
+              conciliacionHijos: false,
+              conciliacionConyuge: false,
+              antiguedadVinculadaDias: 0,
+              antiguedadOtrasDias: 0,
+              puestosSolicitados: puestosCatalogo.length > 0 ? [{ ...puestosCatalogo[0], orden: 1 }] : [],
+              puestoSolicitado: puestosCatalogo[0] || null,
+              merits: { cursos: [], experiencia: [], titulaciones: [], idiomas: [], archivosProcesados: [] }
+            };
+            const conMeritos = mergeMeritsDeOficio(nuevo, meritosNuevos);
+            saveAspirante(conMeritos);
+            guardadosNuevos++;
+          } else {
+            omitidos++;
+          }
+        }
       }
     }
 
     const totalActual = getAllAspirantes().length;
     res.json({
       success: true,
+      tipoImportacion,
       guardadosNuevos,
       actualizados,
       omitidos,
       totalActual,
-      mensaje: `Importación completada con éxito: ${guardadosNuevos} creados, ${actualizados} actualizados, ${omitidos} omitidos.`
+      mensaje: `Operación completada con éxito: ${guardadosNuevos} creados, ${actualizados} actualizados, ${omitidos} omitidos.`
     });
   } catch (error) {
     console.error('Error al confirmar importación:', error);

@@ -3824,6 +3824,7 @@ async function procesarRestaurarBackup(e) {
 // ========================================================
 // SISTEMA DE IMPORTACIÓN MASIVA Y SUMINISTRO DE OFICIO
 // ========================================================
+let tipoImportacionActiva = 'candidatos'; // 'candidatos' o 'meritos'
 let datosImportacionPreviaActual = null;
 
 function abrirModalImportacionMasiva() {
@@ -3834,8 +3835,65 @@ function abrirModalImportacionMasiva() {
   const mb = m.querySelector('.modal-body');
   if (mb) mb.scrollTop = 0;
 
-  // Resetear estados y vistas
-  document.getElementById('inputArchivoImportacion').value = '';
+  // Por defecto abrir en la pestaña de Candidatos
+  cambiarPestanaImportacion('candidatos');
+}
+
+function cambiarPestanaImportacion(tipo) {
+  tipoImportacionActiva = tipo;
+  datosImportacionPreviaActual = null;
+
+  // Actualizar botones de pestaña
+  const tabCand = document.getElementById('tabImportCandidatos');
+  const tabMer = document.getElementById('tabImportMeritos');
+  if (tabCand && tabMer) {
+    if (tipo === 'candidatos') {
+      tabCand.style.borderBottom = '3px solid #b45309';
+      tabCand.style.color = '#b45309';
+      tabCand.style.fontWeight = '700';
+
+      tabMer.style.borderBottom = '3px solid transparent';
+      tabMer.style.color = '#64748b';
+      tabMer.style.fontWeight = '600';
+    } else {
+      tabMer.style.borderBottom = '3px solid #b45309';
+      tabMer.style.color = '#b45309';
+      tabMer.style.fontWeight = '700';
+
+      tabCand.style.borderBottom = '3px solid transparent';
+      tabCand.style.color = '#64748b';
+      tabCand.style.fontWeight = '600';
+    }
+  }
+
+  // Actualizar banner y botones informativos
+  const txtBanner = document.getElementById('textoBannerImportacion');
+  const btnDescarga = document.getElementById('btnDescargaPlantillaActiva');
+  const titDropzone = document.getElementById('tituloDropzoneImport');
+  const subDropzone = document.getElementById('subtituloDropzoneImport');
+  const icoDropzone = document.getElementById('iconoDropzoneImport');
+
+  if (tipo === 'candidatos') {
+    if (txtBanner) {
+      txtBanner.innerHTML = '<strong>👤 1. Ingesta de Candidatos y Solicitudes:</strong> Suministra todos los participantes de golpe a partir de un listado <strong>Excel, Word o PDF</strong> con sus datos personales, situación administrativa, grado personal, conciliación y los puestos solicitados ordenados por preferencia. Si un aspirante ya existe en el concurso, te mostrará un aviso detallado de cambios para que elijas si actualizar su solicitud o no.';
+    }
+    if (btnDescarga) btnDescarga.innerHTML = '📄 Descargar Plantilla Candidatos (.xlsx)';
+    if (icoDropzone) icoDropzone.textContent = '👤';
+    if (titDropzone) titDropzone.textContent = 'Arrastra aquí el archivo de Candidatos y Solicitudes o haz clic para examinar';
+    if (subDropzone) subDropzone.textContent = 'Formatos admitidos: Excel (.xlsx, .xls, .csv), Word (.docx, .doc), o PDF (.pdf)';
+  } else {
+    if (txtBanner) {
+      txtBanner.innerHTML = '<strong>📜 2. Suministro de Méritos De Oficio de Cabildo:</strong> Incorpora de oficio los cursos formativos (denominación, horas, aprovechamiento/asistencia, carácter específico/general) y el tiempo trabajado en Cabildo (días, niveles CD) asociados por DNI. El tribunal podrá cotejar qué méritos nuevos se añaden y elegir de forma pormenorizada si fusionarlos o pisarlos antes de recalcular los baremos automáticamente.';
+    }
+    if (btnDescarga) btnDescarga.innerHTML = '📄 Descargar Plantilla Méritos de Oficio (.xlsx)';
+    if (icoDropzone) icoDropzone.textContent = '📜';
+    if (titDropzone) titDropzone.textContent = 'Arrastra aquí el archivo de Formación y Tiempo Trabajado de Oficio o haz clic para examinar';
+    if (subDropzone) subDropzone.textContent = 'Formatos admitidos: Excel (.xlsx, .xls, .csv) con hojas de Formación y Servicios, Word (.docx) o PDF (.pdf)';
+  }
+
+  // Resetear estados visuales
+  const inputArch = document.getElementById('inputArchivoImportacion');
+  if (inputArch) inputArch.value = '';
   const labelArchivo = document.getElementById('labelArchivoCargado');
   if (labelArchivo) labelArchivo.style.display = 'none';
   const spinner = document.getElementById('spinnerImportacion');
@@ -3844,12 +3902,13 @@ function abrirModalImportacionMasiva() {
   if (panelPrevia) panelPrevia.style.display = 'none';
   const btnFinal = document.getElementById('btnEjecutarImportacionFinal');
   if (btnFinal) btnFinal.style.display = 'none';
-  datosImportacionPreviaActual = null;
 }
 
-function descargarPlantillaExcel() {
-  window.location.href = API_BASE + '/api/import/template';
-  mostrarToast('Descargando Plantilla', 'Descarga iniciada de la plantilla oficial Excel (.xlsx).');
+function descargarPlantillaExcel(tipo) {
+  const tipoTarget = tipo || tipoImportacionActiva || 'candidatos';
+  window.location.href = API_BASE + '/api/import/template?tipo=' + encodeURIComponent(tipoTarget);
+  const nombrePlantilla = tipoTarget === 'meritos' ? 'Méritos de Oficio' : 'Candidatos y Solicitudes';
+  mostrarToast('Descargando Plantilla', `Descarga iniciada de la plantilla oficial de ${nombrePlantilla} (.xlsx).`);
 }
 
 async function procesarArchivoSeleccionado(e) {
@@ -3860,17 +3919,26 @@ async function procesarArchivoSeleccionado(e) {
   const spinner = document.getElementById('spinnerImportacion');
   const panelPrevia = document.getElementById('panelVistaPreviaImportacion');
   const btnFinal = document.getElementById('btnEjecutarImportacionFinal');
+  const txtSpinner = document.getElementById('textoSpinnerImport');
 
   if (labelArchivo) {
     labelArchivo.textContent = `📄 Archivo: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
     labelArchivo.style.display = 'inline-block';
   }
-  if (spinner) spinner.style.display = 'block';
+  if (spinner) {
+    if (txtSpinner) {
+      txtSpinner.textContent = tipoImportacionActiva === 'candidatos'
+        ? 'Analizando participantes, solicitudes de puestos y cotejando con el censo del concurso...'
+        : 'Analizando cursos formativos y servicios prestados de oficio en Cabildo...';
+    }
+    spinner.style.display = 'block';
+  }
   if (panelPrevia) panelPrevia.style.display = 'none';
   if (btnFinal) btnFinal.style.display = 'none';
 
   const formData = new FormData();
   formData.append('archivo', file);
+  formData.append('tipoImportacion', tipoImportacionActiva);
 
   try {
     const res = await fetch(API_BASE + '/api/import/preview', {
@@ -3896,37 +3964,227 @@ async function procesarArchivoSeleccionado(e) {
 function renderizarVistaPreviaImportacion(data) {
   const panelPrevia = document.getElementById('panelVistaPreviaImportacion');
   const btnFinal = document.getElementById('btnEjecutarImportacionFinal');
-  if (panelPrevia) panelPrevia.style.display = 'block';
-  if (btnFinal) btnFinal.style.display = 'inline-block';
-
-  // KPIs
-  const elNuevos = document.getElementById('kpiNuevosImport');
-  if (elNuevos) elNuevos.textContent = data.totalNuevos || 0;
-  const elConf = document.getElementById('kpiConflictosImport');
-  if (elConf) elConf.textContent = data.totalExistentes || 0;
-  const elOfi = document.getElementById('kpiOficioImport');
-  if (elOfi) elOfi.textContent = (data.totalCursosOficio || 0) + (data.totalExperienciaOficio || 0);
-  const elBadgeNuevos = document.getElementById('countBadgeNuevos');
-  if (elBadgeNuevos) elBadgeNuevos.textContent = data.totalNuevos || 0;
-
-  // 1. Renderizar Conflictos / Aspirantes Existentes
+  const contenedorKpis = document.getElementById('contenedorKpisImport');
   const bloqueConflictos = document.getElementById('bloqueConflictosAspirantes');
+  const tituloConflictos = document.getElementById('tituloBloqueConflictos');
+  const botonesAccion = document.getElementById('botonesAccionMasiva');
   const listaConflictos = document.getElementById('listaConflictosDetalle');
-  if (listaConflictos) listaConflictos.innerHTML = '';
+  const bloqueNuevos = document.getElementById('bloqueNuevosAspirantes');
+  const tbodyNuevos = document.getElementById('tbodyNuevosImport');
 
-  if (!data.candidatosExistentes || data.candidatosExistentes.length === 0) {
-    if (bloqueConflictos) bloqueConflictos.style.display = 'none';
-  } else {
+  if (panelPrevia) panelPrevia.style.display = 'block';
+  if (btnFinal) {
+    btnFinal.style.display = 'inline-block';
+    btnFinal.textContent = data.tipo === 'candidatos'
+      ? '🚀 Crear e Importar Candidatos al Concurso'
+      : '🚀 Aplicar Méritos de Oficio y Recalcular Baremos';
+  }
+
+  // ============================================
+  // CASO 1: VISTA PREVIA DE CANDIDATOS Y SOLICITUDES
+  // ============================================
+  if (data.tipo === 'candidatos') {
+    // KPIs de Candidatos
+    if (contenedorKpis) {
+      contenedorKpis.innerHTML = `
+        <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px 14px;">
+          <div style="font-size:0.75rem; font-weight:700; color:#166534; text-transform:uppercase;">Nuevos Candidatos</div>
+          <div style="font-size:1.6rem; font-weight:800; color:#15803d;">${data.totalNuevos || 0}</div>
+          <div style="font-size:0.7rem; color:#166534;">Se crearán de golpe en el concurso</div>
+        </div>
+        <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 14px;">
+          <div style="font-size:0.75rem; font-weight:700; color:#92400e; text-transform:uppercase;">Ya Existentes en Censo</div>
+          <div style="font-size:1.6rem; font-weight:800; color:#b45309;">${data.totalExistentes || 0}</div>
+          <div style="font-size:0.7rem; color:#92400e;">${data.totalConConflicto || 0} con diferencias detectadas</div>
+        </div>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px;">
+          <div style="font-size:0.75rem; font-weight:700; color:#475569; text-transform:uppercase;">Total en Archivo</div>
+          <div style="font-size:1.6rem; font-weight:800; color:#1e293b;">${data.totalDetectados || 0}</div>
+          <div style="font-size:0.7rem; color:#64748b;">Aspirantes y solicitudes procesadas</div>
+        </div>
+      `;
+    }
+
+    // Botones de acción masiva para Candidatos
+    if (botonesAccion) {
+      botonesAccion.innerHTML = `
+        <button type="button" class="btn btn-xs btn-outline" onclick="aplicarResolucionGlobal('actualizar')" style="color:#b45309; border-color:#f59e0b; background:#fffbeb; font-weight:700;">
+          🟡 Actualizar Solicitudes a Todos
+        </button>
+        <button type="button" class="btn btn-xs btn-outline" onclick="aplicarResolucionGlobal('omitir')" style="color:#475569; border-color:#cbd5e1; background:#f8fafc;">
+          ⚪ Omitir Todos
+        </button>
+      `;
+    }
+
+    if (tituloConflictos) {
+      tituloConflictos.innerHTML = `<span>⚠️</span> Candidatos Ya Registrados: Aviso de Sobrescritura y Diferencias Pormenorizadas (${data.totalExistentes || 0})`;
+    }
+
+    // Renderizar tarjetas de candidatos existentes
+    if (listaConflictos) listaConflictos.innerHTML = '';
+    if (!data.candidatosExistentes || data.candidatosExistentes.length === 0) {
+      if (bloqueConflictos) bloqueConflictos.style.display = 'none';
+    } else {
+      if (bloqueConflictos) bloqueConflictos.style.display = 'block';
+      data.candidatosExistentes.forEach((item, idx) => {
+        const act = item.aspiranteActual;
+        const diff = item.diff;
+
+        const card = document.createElement('div');
+        card.className = 'conflict-card';
+        card.style.cssText = 'border:1px solid #fde68a; border-radius:8px; background:#fffdf5; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.05);';
+
+        let diffRowsHtml = '';
+        if (diff.cambios && diff.cambios.length > 0) {
+          diff.cambios.forEach(c => {
+            diffRowsHtml += `
+              <tr style="border-bottom:1px solid #fef3c7;">
+                <td style="padding:6px 8px; font-weight:700; color:#92400e; vertical-align:top; width:28%;">${escapeHtml(c.campo)}</td>
+                <td style="padding:6px 8px; color:#64748b; background:#f8fafc; vertical-align:top; width:36%;">
+                  <span style="font-size:0.75rem; text-decoration:line-through; opacity:0.8;">${escapeHtml(c.anterior)}</span>
+                </td>
+                <td style="padding:6px 8px; color:#065f46; font-weight:700; background:#f0fdf4; vertical-align:top; width:36%;">
+                  <span>${escapeHtml(c.nuevo)}</span>
+                </td>
+              </tr>
+            `;
+          });
+        } else {
+          diffRowsHtml = `
+            <tr>
+              <td colspan="3" style="padding:8px; text-align:center; color:#64748b;">
+                ℹ️ Los datos personales y puestos solicitados coinciden exactamente con los ya registrados.
+              </td>
+            </tr>
+          `;
+        }
+
+        card.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px; border-bottom:1px solid #fef3c7; padding-bottom:8px;">
+            <div>
+              <span style="font-size:0.95rem; font-weight:800; color:#0f172a;">👤 ${escapeHtml(act.nombre)}</span>
+              <span style="font-family:monospace; font-weight:700; color:#0369a1; margin-left:6px; background:#e0f2fe; padding:2px 6px; border-radius:4px; font-size:0.8rem;">${escapeHtml(act.dni)}</span>
+              <span class="badge ${diff.hasConflicts ? 'badge-warning' : 'badge-neutral'}" style="margin-left:8px;">
+                ${diff.hasConflicts ? `${diff.totalCambios} diferencia(s)` : 'Sin cambios'}
+              </span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <label style="font-size:0.75rem; font-weight:700; color:#475569;">Acción:</label>
+              <select class="form-control sel-resolucion-candidato" data-dni="${act.dni}" data-idx="${idx}" style="font-size:0.775rem; font-weight:700; padding:4px 8px; min-width:240px; border-color:#d97706;">
+                <option value="actualizar" selected>🟡 Actualizar solicitud (Pisar datos personales y puestos pedidos)</option>
+                <option value="omitir">⚪ Omitir (Conservar actual sin tocar)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="font-size:0.75rem; color:#78350f; margin-bottom:6px;">
+            Diferencias detectadas entre el censo actual y el archivo importado:
+          </div>
+
+          <table style="width:100%; font-size:0.775rem; border-collapse:collapse; background:#ffffff; border:1px solid #fef3c7; border-radius:6px; overflow:hidden;">
+            <thead>
+              <tr style="background:#fef3c7; color:#92400e; font-size:0.75rem;">
+                <th style="padding:4px 8px; text-align:left;">Campo</th>
+                <th style="padding:4px 8px; text-align:left;">Valor Actual Registrado</th>
+                <th style="padding:4px 8px; text-align:left;">Valor Propuesto en Archivo</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${diffRowsHtml}
+            </tbody>
+          </table>
+        `;
+        listaConflictos.appendChild(card);
+      });
+    }
+
+    // Renderizar Nuevos Candidatos a crear de golpe
+    if (tbodyNuevos) tbodyNuevos.innerHTML = '';
+    const badgeNuevos = document.getElementById('countBadgeNuevos');
+    if (badgeNuevos) badgeNuevos.textContent = data.totalNuevos || 0;
+
+    if (!data.candidatosNuevos || data.candidatosNuevos.length === 0) {
+      if (bloqueNuevos) bloqueNuevos.style.display = 'none';
+    } else {
+      if (bloqueNuevos) bloqueNuevos.style.display = 'block';
+      data.candidatosNuevos.forEach(cand => {
+        const tr = document.createElement('tr');
+        const puestosStr = (cand.puestosSolicitados || []).map(p => `${p.codigoRpt || p.id} (${p.orden}º)`).join(', ') || '-';
+        const hijosStr = cand.conciliacionHijos ? 'Hijos: Sí' : 'Hijos: No';
+
+        tr.innerHTML = `
+          <td style="font-family:monospace; font-weight:700; color:#0369a1;">${escapeHtml(cand.dni)}</td>
+          <td><strong>${escapeHtml(cand.nombre)}</strong></td>
+          <td><span class="badge badge-neutral">${escapeHtml(cand.situacionAdministrativa || 'definitiva')}</span></td>
+          <td><span style="font-size:0.75rem; color:#1e40af; font-weight:600;">${escapeHtml(puestosStr)}</span></td>
+          <td style="text-align:right;">
+            <span class="badge badge-info">CD ${cand.gradoPersonal || 16}</span>
+            <span class="badge badge-neutral" style="margin-left:4px;">${hijosStr}</span>
+          </td>
+        `;
+        tbodyNuevos.appendChild(tr);
+      });
+    }
+  }
+
+  // ============================================
+  // CASO 2: VISTA PREVIA DE MÉRITOS DE OFICIO (FORMACIÓN Y SERVICIOS)
+  // ============================================
+  else if (data.tipo === 'meritos') {
+    if (bloqueNuevos) bloqueNuevos.style.display = 'none'; // No aplica en este modo
+
+    // KPIs de Méritos
+    if (contenedorKpis) {
+      contenedorKpis.innerHTML = `
+        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:10px 14px;">
+          <div style="font-size:0.75rem; font-weight:700; color:#1e40af; text-transform:uppercase;">Aspirantes Afectados</div>
+          <div style="font-size:1.6rem; font-weight:800; color:#2563eb;">${data.totalAspirantes || 0}</div>
+          <div style="font-size:0.7rem; color:#1e40af;">Con formación o servicios en el archivo</div>
+        </div>
+        <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px 14px;">
+          <div style="font-size:0.75rem; font-weight:700; color:#166534; text-transform:uppercase;">Cursos Detectados</div>
+          <div style="font-size:1.6rem; font-weight:800; color:#15803d;">${data.totalCursos || 0}</div>
+          <div style="font-size:0.7rem; color:#166534;">Formación de oficio certificada</div>
+        </div>
+        <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 14px;">
+          <div style="font-size:0.75rem; font-weight:700; color:#92400e; text-transform:uppercase;">Servicios Cabildo</div>
+          <div style="font-size:1.6rem; font-weight:800; color:#b45309;">${data.totalServicios || 0}</div>
+          <div style="font-size:0.7rem; color:#92400e;">Períodos de tiempo computados</div>
+        </div>
+      `;
+    }
+
+    // Botones de acción masiva para Méritos
+    if (botonesAccion) {
+      botonesAccion.innerHTML = `
+        <button type="button" class="btn btn-xs btn-outline" onclick="aplicarResolucionGlobal('fusionar_oficio')" style="color:#0369a1; border-color:#0284c7; font-weight:700; background:#f0f9ff;">
+          🟢 Fusionar De Oficio a Todos
+        </button>
+        <button type="button" class="btn btn-xs btn-outline" onclick="aplicarResolucionGlobal('sobrescribir')" style="color:#b45309; border-color:#f59e0b; background:#fffbeb;">
+          🟡 Sobrescribir Méritos a Todos
+        </button>
+        <button type="button" class="btn btn-xs btn-outline" onclick="aplicarResolucionGlobal('omitir')" style="color:#475569; border-color:#cbd5e1; background:#f8fafc;">
+          ⚪ Omitir Todos
+        </button>
+      `;
+    }
+
+    if (tituloConflictos) {
+      tituloConflictos.innerHTML = `<span>📜</span> Desglose Pormenorizado de Méritos de Oficio a Incorporar (${data.totalAspirantes || 0})`;
+    }
+
     if (bloqueConflictos) bloqueConflictos.style.display = 'block';
-    data.candidatosExistentes.forEach((item, idx) => {
-      const act = item.aspiranteActual;
-      const diff = item.diff;
+    if (listaConflictos) listaConflictos.innerHTML = '';
 
+    (data.detalles || []).forEach((det, idx) => {
       const card = document.createElement('div');
-      card.className = 'conflict-card';
-      card.style.cssText = 'border:1px solid #fde68a; border-radius:8px; background:#fffdf5; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.05);';
+      card.className = 'merit-card';
+      card.style.cssText = 'border:1px solid #bfdbfe; border-radius:8px; background:#f8fafc; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.05); margin-bottom:10px;';
 
-      let diffRowsHtml = '';
+      const diff = det.diff || {};
+      let filasCambiosHtml = '';
+
       if (diff.cambios && diff.cambios.length > 0) {
         diff.cambios.forEach(c => {
           let detalleHtml = '';
@@ -3934,13 +4192,13 @@ function renderizarVistaPreviaImportacion(data) {
             detalleHtml = `<div style="font-size:0.72rem; color:#0369a1; margin-top:3px; background:#eff6ff; padding:4px 6px; border-radius:4px;">${c.detalleItems.join('<br>')}</div>`;
           }
 
-          diffRowsHtml += `
-            <tr style="border-bottom:1px solid #fef3c7;">
-              <td style="padding:6px 8px; font-weight:700; color:#92400e; vertical-align:top;">${escapeHtml(c.campo)}</td>
-              <td style="padding:6px 8px; color:#64748b; background:#f8fafc; vertical-align:top;">
-                <span style="font-size:0.75rem; text-decoration:line-through; opacity:0.8;">${escapeHtml(c.anterior)}</span>
+          filasCambiosHtml += `
+            <tr style="border-bottom:1px solid #e2e8f0;">
+              <td style="padding:6px 8px; font-weight:700; color:#1e40af; vertical-align:top; width:30%;">${escapeHtml(c.campo)}</td>
+              <td style="padding:6px 8px; color:#64748b; background:#ffffff; vertical-align:top; width:35%;">
+                <span style="font-size:0.75rem;">${escapeHtml(c.anterior)}</span>
               </td>
-              <td style="padding:6px 8px; color:#065f46; font-weight:700; background:#f0fdf4; vertical-align:top;">
+              <td style="padding:6px 8px; color:#065f46; font-weight:700; background:#f0fdf4; vertical-align:top; width:35%;">
                 <span>${escapeHtml(c.nuevo)}</span>
                 ${detalleHtml}
               </td>
@@ -3948,91 +4206,69 @@ function renderizarVistaPreviaImportacion(data) {
           `;
         });
       } else {
-        diffRowsHtml = `
+        filasCambiosHtml = `
           <tr>
             <td colspan="3" style="padding:8px; text-align:center; color:#64748b;">
-              ℹ️ Los datos generales coinciden con los registrados. Puedes fusionar méritos adicionales si existen.
+              ℹ️ Los méritos en el archivo ya estaban registrados previamente.
             </td>
           </tr>
         `;
       }
 
+      const badgeEstado = det.registradoEnConcurso
+        ? '<span class="badge badge-success" style="margin-left:6px;">En Censo Oficial</span>'
+        : '<span class="badge badge-warning" style="margin-left:6px;">⚠️ No Registrado en Censo (Se creará)</span>';
+
       card.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px; border-bottom:1px solid #fef3c7; padding-bottom:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
           <div>
-            <span style="font-size:0.95rem; font-weight:800; color:#0f172a;">👤 ${escapeHtml(act.nombre)}</span>
-            <span style="font-family:monospace; font-weight:700; color:#0369a1; margin-left:6px; background:#e0f2fe; padding:2px 6px; border-radius:4px; font-size:0.8rem;">${escapeHtml(act.dni)}</span>
-            <span class="badge ${diff.hasConflicts ? 'badge-warning' : 'badge-neutral'}" style="margin-left:8px;">
-              ${diff.hasConflicts ? `${diff.totalCambios} diferencia(s)` : 'Sin cambios directos'}
-            </span>
+            <span style="font-size:0.95rem; font-weight:800; color:#0f172a;">👤 ${escapeHtml(det.nombre || ('Aspirante ' + det.dni))}</span>
+            <span style="font-family:monospace; font-weight:700; color:#0369a1; margin-left:6px; background:#e0f2fe; padding:2px 6px; border-radius:4px; font-size:0.8rem;">${escapeHtml(det.dni)}</span>
+            ${badgeEstado}
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
             <label style="font-size:0.75rem; font-weight:700; color:#475569;">Acción a aplicar:</label>
-            <select class="form-control sel-resolucion-conflicto" data-dni="${act.dni}" data-idx="${idx}" style="font-size:0.775rem; font-weight:700; padding:4px 8px; min-width:240px; border-color:#d97706;">
-              <option value="fusionar_oficio" selected>🟢 Fusionar méritos de oficio (Sumar cursos y experiencia)</option>
-              <option value="sobrescribir">🟡 Sobrescribir todo (Pisar con archivo)</option>
-              <option value="omitir">⚪ Omitir (Conservar actual sin cambios)</option>
+            <select class="form-control sel-resolucion-meritos" data-dni="${det.dni}" data-idx="${idx}" style="font-size:0.775rem; font-weight:700; padding:4px 8px; min-width:250px; border-color:#0284c7;">
+              <option value="fusionar_oficio" selected>🟢 Fusionar méritos (Sumar cursos y días sin borrar lo previo)</option>
+              <option value="sobrescribir">🟡 Sobrescribir méritos (Reemplazar formación y experiencia)</option>
+              <option value="omitir">⚪ Omitir (Dejar aspirante intacto)</option>
             </select>
           </div>
         </div>
 
-        <div style="font-size:0.75rem; color:#78350f; margin-bottom:6px;">
-          Detalle pormenorizado de las diferencias encontradas:
-        </div>
-
-        <table style="width:100%; font-size:0.775rem; border-collapse:collapse; background:#ffffff; border:1px solid #fef3c7; border-radius:6px; overflow:hidden;">
+        <table style="width:100%; font-size:0.775rem; border-collapse:collapse; background:#ffffff; border:1px solid #e2e8f0; border-radius:6px; overflow:hidden;">
           <thead>
-            <tr style="background:#fef3c7; color:#92400e; font-size:0.75rem;">
-              <th style="padding:4px 8px; text-align:left; width:28%;">Campo o Mérito</th>
-              <th style="padding:4px 8px; text-align:left; width:36%;">Valor Actual Registrado</th>
-              <th style="padding:4px 8px; text-align:left; width:36%;">Valor Propuesto en Archivo</th>
+            <tr style="background:#f1f5f9; color:#334155; font-size:0.75rem;">
+              <th style="padding:4px 8px; text-align:left;">Mérito de Oficio</th>
+              <th style="padding:4px 8px; text-align:left;">Estado Previo en Concurso</th>
+              <th style="padding:4px 8px; text-align:left;">Propuesta de Oficio en Archivo</th>
             </tr>
           </thead>
           <tbody>
-            ${diffRowsHtml}
+            ${filasCambiosHtml}
           </tbody>
         </table>
       `;
 
-      if (listaConflictos) listaConflictos.appendChild(card);
-    });
-  }
-
-  // 2. Renderizar Nuevos Aspirantes
-  const bloqueNuevos = document.getElementById('bloqueNuevosAspirantes');
-  const tbodyNuevos = document.getElementById('tbodyNuevosImport');
-  if (tbodyNuevos) tbodyNuevos.innerHTML = '';
-
-  if (!data.candidatosNuevos || data.candidatosNuevos.length === 0) {
-    if (bloqueNuevos) bloqueNuevos.style.display = 'none';
-  } else {
-    if (bloqueNuevos) bloqueNuevos.style.display = 'block';
-    data.candidatosNuevos.forEach(cand => {
-      const tr = document.createElement('tr');
-      const puestosStr = (cand.puestosSolicitados || []).map(p => p.codigoRpt || p.id).join(', ') || '-';
-      const numCursos = (cand.merits?.cursos || []).length;
-
-      tr.innerHTML = `
-        <td style="font-family:monospace; font-weight:700; color:#0369a1;">${escapeHtml(cand.dni)}</td>
-        <td><strong>${escapeHtml(cand.nombre)}</strong></td>
-        <td><span class="badge badge-neutral">${escapeHtml(cand.situacionAdministrativa || 'definitiva')}</span></td>
-        <td><span style="font-size:0.75rem; color:#1e40af; font-weight:600;">${escapeHtml(puestosStr)}</span></td>
-        <td style="text-align:right;">
-          <span class="badge badge-info">${cand.antiguedadVinculadaDias || 0} d Cabildo</span>
-          <span class="badge badge-neutral" style="margin-left:4px;">${numCursos} cursos</span>
-        </td>
-      `;
-      if (tbodyNuevos) tbodyNuevos.appendChild(tr);
+      listaConflictos.appendChild(card);
     });
   }
 }
 
 function aplicarResolucionGlobal(accion) {
-  document.querySelectorAll('.sel-resolucion-conflicto').forEach(sel => {
-    sel.value = accion;
-  });
-  const nombreAccion = accion === 'fusionar_oficio' ? 'Fusionar méritos de oficio' : (accion === 'sobrescribir' ? 'Sobrescribir todo' : 'Omitir');
-  mostrarToast('Resolución Masiva Aplicada', `Se ha marcado "${nombreAccion}" para todos los existentes.`);
+  if (tipoImportacionActiva === 'candidatos') {
+    document.querySelectorAll('.sel-resolucion-candidato').forEach(sel => {
+      sel.value = accion;
+    });
+    const nombre = accion === 'actualizar' ? 'Actualizar solicitud' : 'Omitir';
+    mostrarToast('Resolución Masiva Aplicada', `Se ha marcado "${nombre}" para todos los candidatos existentes.`);
+  } else {
+    document.querySelectorAll('.sel-resolucion-meritos').forEach(sel => {
+      sel.value = accion;
+    });
+    const nombre = accion === 'fusionar_oficio' ? 'Fusionar méritos de oficio' : (accion === 'sobrescribir' ? 'Sobrescribir méritos' : 'Omitir');
+    mostrarToast('Resolución Masiva Aplicada', `Se ha marcado "${nombre}" para todos los aspirantes.`);
+  }
 }
 
 async function ejecutarImportacionConfirmada() {
@@ -4041,30 +4277,50 @@ async function ejecutarImportacionConfirmada() {
   const btnFinal = document.getElementById('btnEjecutarImportacionFinal');
   if (btnFinal) {
     btnFinal.disabled = true;
-    btnFinal.textContent = '⏳ Guardando en el concurso...';
+    btnFinal.textContent = '⏳ Procesando importación...';
   }
 
-  // Recopilar resoluciones de los existentes
-  const resolucionesExistentes = [];
-  document.querySelectorAll('.sel-resolucion-conflicto').forEach(sel => {
-    const dni = sel.getAttribute('data-dni');
-    const idx = parseInt(sel.getAttribute('data-idx'), 10);
-    const accion = sel.value;
-    const item = datosImportacionPreviaActual.candidatosExistentes[idx];
-
-    if (item) {
-      resolucionesExistentes.push({
-        dni,
-        accion,
-        aspiranteImportado: item.aspiranteImportado
-      });
-    }
-  });
-
-  const payload = {
-    candidatosNuevos: datosImportacionPreviaActual.candidatosNuevos || [],
-    resolucionesExistentes
+  let payload = {
+    tipoImportacion: tipoImportacionActiva
   };
+
+  if (tipoImportacionActiva === 'candidatos') {
+    const resolucionesExistentes = [];
+    document.querySelectorAll('.sel-resolucion-candidato').forEach(sel => {
+      const dni = sel.getAttribute('data-dni');
+      const idx = parseInt(sel.getAttribute('data-idx'), 10);
+      const accion = sel.value;
+      const item = datosImportacionPreviaActual.candidatosExistentes[idx];
+      if (item) {
+        resolucionesExistentes.push({
+          dni,
+          accion,
+          aspiranteImportado: item.aspiranteImportado
+        });
+      }
+    });
+
+    payload.candidatosNuevos = datosImportacionPreviaActual.candidatosNuevos || [];
+    payload.resolucionesExistentes = resolucionesExistentes;
+  } else {
+    const resolucionesMeritos = [];
+    document.querySelectorAll('.sel-resolucion-meritos').forEach(sel => {
+      const dni = sel.getAttribute('data-dni');
+      const idx = parseInt(sel.getAttribute('data-idx'), 10);
+      const accion = sel.value;
+      const item = datosImportacionPreviaActual.detalles[idx];
+      if (item) {
+        resolucionesMeritos.push({
+          dni,
+          accion,
+          nombre: item.nombre,
+          meritosNuevos: item.meritosNuevos
+        });
+      }
+    });
+
+    payload.resolucionesMeritos = resolucionesMeritos;
+  }
 
   try {
     const res = await fetch(API_BASE + '/api/import/confirm', {
@@ -4075,7 +4331,9 @@ async function ejecutarImportacionConfirmada() {
     const result = await res.json();
     if (btnFinal) {
       btnFinal.disabled = false;
-      btnFinal.textContent = '🚀 Aplicar e Importar Candidatos al Concurso';
+      btnFinal.textContent = tipoImportacionActiva === 'candidatos'
+        ? '🚀 Crear e Importar Candidatos al Concurso'
+        : '🚀 Aplicar Méritos de Oficio y Recalcular Baremos';
     }
 
     if (result.success) {
@@ -4088,7 +4346,7 @@ async function ejecutarImportacionConfirmada() {
       if (vEst && vEst.style.display !== 'none') {
         await cargarVistaEstadisticas();
       }
-      mostrarToast('Importación Exitosa', result.mensaje || 'Aspirantes y méritos de oficio incorporados.');
+      mostrarToast('Operación Completada', result.mensaje || 'Datos incorporados al concurso.');
       alert('✅ ' + (result.mensaje || 'Importación completada con éxito.'));
     } else {
       alert('Error al confirmar importación: ' + (result.error || 'Desconocido'));
@@ -4096,7 +4354,9 @@ async function ejecutarImportacionConfirmada() {
   } catch (err) {
     if (btnFinal) {
       btnFinal.disabled = false;
-      btnFinal.textContent = '🚀 Aplicar e Importar Candidatos al Concurso';
+      btnFinal.textContent = tipoImportacionActiva === 'candidatos'
+        ? '🚀 Crear e Importar Candidatos al Concurso'
+        : '🚀 Aplicar Méritos de Oficio y Recalcular Baremos';
     }
     alert('Error al procesar la confirmación: ' + err.message);
   }
